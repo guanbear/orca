@@ -34,6 +34,8 @@ type UsageProviderSnapshots = {
   minimax: ProviderRateLimits | null | undefined
   grok: ProviderRateLimits | null | undefined
   cursor: ProviderRateLimits | null | undefined
+  // Optional for renderer HMR against an older main process and persisted test fixtures.
+  kiro?: ProviderRateLimits | null
 }
 
 type UsageProviderId = ProviderRateLimits['provider']
@@ -181,7 +183,8 @@ export function isUsageEmptyState(
     antigravitySnapshotPending ||
     isProviderSnapshotPending(providers.minimax) ||
     isProviderSnapshotPending(providers.grok) ||
-    isProviderSnapshotPending(providers.cursor)
+    isProviderSnapshotPending(providers.cursor) ||
+    (providers.kiro !== undefined && isProviderSnapshotPending(providers.kiro))
   ) {
     return false
   }
@@ -195,6 +198,7 @@ export function isUsageEmptyState(
     !isProviderConfigured(providers.antigravity) &&
     !isProviderConfigured(providers.minimax) &&
     !isProviderConfigured(providers.grok) &&
-    !isProviderConfigured(providers.cursor)
+    !isProviderConfigured(providers.cursor) &&
+    !isProviderConfigured(providers.kiro)
   )
 }

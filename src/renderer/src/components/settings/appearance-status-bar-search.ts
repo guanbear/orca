@@ -6,6 +6,7 @@ import { getAntigravityStatusBarToggleSearchEntry } from './appearance-status-ba
 import { getMiniMaxStatusBarToggleSearchEntry } from './appearance-status-bar-minimax-toggle-search'
 import { getGrokStatusBarToggleSearchEntry } from './appearance-status-bar-grok-toggle-search'
 import { getCursorStatusBarToggleSearchEntry } from './appearance-status-bar-cursor-toggle-search'
+import { getKiroStatusBarToggleSearchEntry } from './appearance-status-bar-kiro-toggle-search'
 
 export const getStatusBarToggles = createLocalizedCatalog(
   (): readonly {
@@ -169,6 +170,7 @@ export const getStatusBarToggles = createLocalizedCatalog(
     getMiniMaxStatusBarToggleSearchEntry(),
     getGrokStatusBarToggleSearchEntry(),
     getCursorStatusBarToggleSearchEntry(),
+    getKiroStatusBarToggleSearchEntry(),
     {
       id: 'ssh',
       title: translate('auto.components.settings.appearance.search.57fb424c56', 'Remote Hosts'),

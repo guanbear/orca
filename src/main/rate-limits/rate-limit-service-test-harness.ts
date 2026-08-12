@@ -11,6 +11,7 @@ import { readGrokAuthSession } from './grok-auth'
 import { fetchCursorRateLimits } from './cursor-fetcher'
 import { readCursorAuthSession } from './cursor-auth'
 import { fetchOpenCodeGoUsage } from './opencode-go-usage-source-selection'
+import { fetchKiroRateLimits } from './kiro-usage-fetcher'
 import { hasMiniMaxSessionCookie } from '../minimax/minimax-cookie-store'
 
 export type Deferred<T> = {
@@ -92,6 +93,7 @@ export function mockFreshBackgroundProviderFetches(): void {
   vi.mocked(fetchMiniMaxRateLimits).mockImplementation(async () => okProvider('minimax', 0))
   vi.mocked(fetchGrokRateLimits).mockImplementation(async () => unavailableProvider('grok'))
   vi.mocked(fetchCursorRateLimits).mockImplementation(async () => unavailableProvider('cursor'))
+  vi.mocked(fetchKiroRateLimits).mockImplementation(async () => unavailableProvider('kiro'))
 }
 
 /** Shared `beforeEach` body: healthy stubs for every provider the service polls. */
@@ -110,6 +112,7 @@ export function resetRateLimitProviderMocks(): void {
     status: 'unavailable'
   })
   vi.mocked(fetchCursorRateLimits).mockResolvedValue(unavailableProvider('cursor'))
+  vi.mocked(fetchKiroRateLimits).mockResolvedValue(unavailableProvider('kiro'))
   vi.mocked(hasMiniMaxSessionCookie).mockReturnValue(false)
   vi.mocked(readGrokAuthSession).mockReturnValue({ status: 'missing' })
   vi.mocked(readCursorAuthSession).mockResolvedValue({ status: 'missing' })
