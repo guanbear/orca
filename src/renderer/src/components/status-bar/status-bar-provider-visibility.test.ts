@@ -459,7 +459,8 @@ describe('isUsageEmptyState', () => {
           antigravity: provider('unavailable', { provider: 'antigravity' }),
           minimax: provider('unavailable', { provider: 'minimax' }),
           grok: provider('unavailable', { provider: 'grok' }),
-          cursor: provider('unavailable', { provider: 'cursor' })
+          cursor: provider('unavailable', { provider: 'cursor' }),
+          zcode: provider('unavailable', { provider: 'zcode' })
         },
         usageSettings()
       )
@@ -478,7 +479,8 @@ describe('isUsageEmptyState', () => {
           antigravity: provider('unavailable', { provider: 'antigravity' }),
           minimax: provider('unavailable', { provider: 'minimax' }),
           grok: provider('unavailable', { provider: 'grok' }),
-          cursor: provider('unavailable', { provider: 'cursor' })
+          cursor: provider('unavailable', { provider: 'cursor' }),
+          zcode: provider('unavailable', { provider: 'zcode' })
         },
         usageSettings({
           codexManagedAccounts: [
@@ -512,7 +514,8 @@ describe('isUsageEmptyState', () => {
           antigravity: null,
           minimax: provider('unavailable', { provider: 'minimax' }),
           grok: provider('unavailable', { provider: 'grok' }),
-          cursor: provider('unavailable', { provider: 'cursor' })
+          cursor: provider('unavailable', { provider: 'cursor' }),
+          zcode: provider('unavailable', { provider: 'zcode' })
         },
         usageSettings()
       )
@@ -531,7 +534,8 @@ describe('isUsageEmptyState', () => {
           antigravity: null,
           grok: provider('unavailable', { provider: 'grok' }),
           minimax: provider('unavailable', { provider: 'minimax' }),
-          cursor: provider('unavailable', { provider: 'cursor' })
+          cursor: provider('unavailable', { provider: 'cursor' }),
+          zcode: provider('unavailable', { provider: 'zcode' })
         },
         usageSettings({ antigravityUsageConfigured: true, geminiCliOAuthEnabled: true })
       )
@@ -552,7 +556,8 @@ describe('isUsageEmptyState', () => {
           antigravity: null,
           grok: provider('unavailable', { provider: 'grok' }),
           minimax: provider('unavailable', { provider: 'minimax' }),
-          cursor: provider('unavailable', { provider: 'cursor' })
+          cursor: provider('unavailable', { provider: 'cursor' }),
+          zcode: provider('unavailable', { provider: 'zcode' })
         },
         usageSettings({ antigravityUsageConfigured: true })
       )
