@@ -61,20 +61,31 @@ export async function createExistingWorktreeWorkerTerminal(args: {
   worktreeId: string
   agent: TuiAgent
   launchPreferences?: AgentLaunchPreferences
+  promptDelivery: 'agent-input' | 'startup-command'
+  interactiveAgentCommand?: string
   taskId: string
   effects: WorkerEffect[]
 }): Promise<{ handle: string; warning?: string }> {
-  const terminal = await args.runtime.createTerminal(`id:${args.worktreeId}`, {
-    // Why: the agent id is not a shell command — `cursor` resolves to the Cursor
-    // desktop app while its CLI is `cursor-agent`. Let the runtime build the
-    // configured launcher instead of executing the raw id.
-    startupAgent: args.agent,
-    ...(args.launchPreferences ? { launchPreferences: args.launchPreferences } : {}),
-    title: `worker-${args.taskId}`,
-    // Why: dispatching a worker is background work; it must not pull the sidebar
-    // to the worker's workspace while the user is reading somewhere else.
-    surfaceOwner: false
-  })
+  const terminal =
+    args.promptDelivery === 'startup-command' || args.interactiveAgentCommand
+      ? await args.runtime.createDeferredAgentTerminal(`id:${args.worktreeId}`, {
+          agent: args.agent,
+          bareShell: true,
+          ...(args.launchPreferences ? { launchPreferences: args.launchPreferences } : {}),
+          title: `worker-${args.taskId}`,
+          surfaceOwner: false
+        })
+      : await args.runtime.createTerminal(`id:${args.worktreeId}`, {
+          // Why: the agent id is not a shell command — `cursor` resolves to the Cursor
+          // desktop app while its CLI is `cursor-agent`. Let the runtime build the
+          // configured launcher instead of executing the raw id.
+          startupAgent: args.agent,
+          ...(args.launchPreferences ? { launchPreferences: args.launchPreferences } : {}),
+          title: `worker-${args.taskId}`,
+          // Why: dispatching a worker is background work; it must not pull the sidebar
+          // to the worker's workspace while the user is reading somewhere else.
+          surfaceOwner: false
+        })
   args.effects.push({
     kind: 'terminal',
     role: 'agent',
@@ -83,6 +94,22 @@ export async function createExistingWorktreeWorkerTerminal(args: {
     surface: terminal.surface,
     warning: terminal.warning
   })
+  if (args.interactiveAgentCommand) {
+    const shellReady = await args.runtime.waitForTerminal(terminal.handle, {
+      condition: 'tui-idle',
+      timeoutMs: 30_000
+    })
+    if (!shellReady.satisfied) {
+      throw new Error('interactive_agent_shell_not_ready')
+    }
+    await args.runtime.sendTerminal(terminal.handle, {
+      text: args.interactiveAgentCommand,
+      enter: true
+    })
+    if (!(await args.runtime.waitForTerminalAgentProcess(terminal.handle, args.agent, 30_000))) {
+      throw new Error('interactive_agent_start_failed')
+    }
+  }
   return { handle: terminal.handle, warning: terminal.warning }
 }
 
