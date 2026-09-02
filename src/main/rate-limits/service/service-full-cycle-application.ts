@@ -1,7 +1,7 @@
 import { RateLimitServiceFullCyclePreparation } from './service-full-cycle-preparation'
 import { deriveAntigravityRateLimits } from '../antigravity-usage-mirror'
-import { settleSiblingProviderResult } from './service-sibling-provider-result'
-import type { ProviderRateLimits } from './service-types'
+import { settleSiblingProviderResult, type SettledProviderResult } from './service-sibling-provider-result'
+import type { InternalRateLimitState, ProviderRateLimits } from './service-types'
 
 export abstract class RateLimitServiceFullCycleApplication extends RateLimitServiceFullCyclePreparation {
   protected async runFetchAllCycle(
@@ -36,7 +36,8 @@ export abstract class RateLimitServiceFullCycleApplication extends RateLimitServ
         miniMaxResult
       ],
       grokResultPromise,
-      cursorResultPromise
+      cursorResultPromise,
+      kiroResultPromise
     } = prepared
     if (signal.aborted) {
       return
@@ -193,17 +194,25 @@ export abstract class RateLimitServiceFullCycleApplication extends RateLimitServ
         : this.state.minimax
     })
 
+    await Promise.all([
+      this.applyGrokAndCursorResults(grokResultPromise, cursorResultPromise, previousState, signal),
+      this.applyKiroResult(kiroResultPromise, previousState.kiro, signal)
+    ])
+  }
+
+  private async applyGrokAndCursorResults(
+    grokResultPromise: Promise<SettledProviderResult>,
+    cursorResultPromise: Promise<SettledProviderResult>,
+    previousState: Pick<InternalRateLimitState, 'grok' | 'cursor'>,
+    signal: AbortSignal
+  ): Promise<void> {
     const [grokSettled, cursorSettled] = await Promise.all([grokResultPromise, cursorResultPromise])
     if (signal.aborted) {
       return
     }
     const grok = settleSiblingProviderResult('grok', grokSettled)
     const cursor = settleSiblingProviderResult('cursor', cursorSettled)
-    // Why: the stale policy keeps a recent snapshot through a failed refresh, but
-    // a snapshot belonging to a different Cursor account must not survive the
-    // switch — the Accounts pane would name the new account beside the old
-    // account's figures. Only a known-and-changed identity clears it, so an
-    // errored refresh that reports no account still keeps its own last reading.
+    // A changed Cursor identity must not inherit another account's stale figures.
     const previousCursorAccount = previousState.cursor?.usageMetadata?.authProvenance
     const cursorAccount = cursor.usageMetadata?.authProvenance
     const cursorAccountChanged =
@@ -216,6 +225,23 @@ export abstract class RateLimitServiceFullCycleApplication extends RateLimitServ
       ...this.state,
       grok: this.applyStalePolicy(grok, previousState.grok),
       cursor: cursorAccountChanged ? cursor : this.applyStalePolicy(cursor, previousState.cursor)
+    })
+  }
+
+  private async applyKiroResult(
+    resultPromise: Promise<SettledProviderResult>,
+    previousKiro: ProviderRateLimits | null,
+    signal: AbortSignal
+  ): Promise<void> {
+    const settled = await resultPromise
+    if (signal.aborted) {
+      return
+    }
+    const kiro = settleSiblingProviderResult('kiro', settled)
+    this.trackActiveFailureStreak('kiro', kiro)
+    this.updateState({
+      ...this.state,
+      kiro: this.applyStalePolicy(kiro, previousKiro)
     })
   }
 }
