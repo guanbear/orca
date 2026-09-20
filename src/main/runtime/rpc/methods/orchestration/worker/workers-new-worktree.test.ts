@@ -239,6 +239,9 @@ describe('orchestration new-worktree workers', () => {
       text: 'command zcode --mode yolo',
       enter: true
     })
+    expect(vi.mocked(runtime.sendTerminal).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(runtime.waitForTerminal).mock.invocationCallOrder[0]!
+    )
     expect(runtime.waitForTerminalAgentInputReady).toHaveBeenCalledWith('term_worker', 'zcode')
     expect(runtime.waitForTerminalProviderSession).toHaveBeenCalledWith(
       'term_worker',

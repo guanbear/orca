@@ -31,13 +31,21 @@ export class OrcaRuntimeWithZcodeOrchestration extends OrcaRuntimeWithResolveWai
       const ptyId = host.getPtyId(handle)
       const recentOutput = ptyId ? (host.readRecentOutput(ptyId) ?? '') : ''
       const terminal = await this.showTerminal(handle).catch(() => null)
+      // ZCode uses an alternate-screen renderer. Its normal PTY tail and terminal
+      // summary preview can therefore be empty even while the composer is fully
+      // visible. `terminal read --screen` uses this same rendered-screen path.
+      const screen = await this.readTerminal(handle, { screen: true }).catch(() => null)
+      const screenOutput = screen
+        ? [...screen.tail, ...(screen.draft ? [screen.draft] : [])].join('\n')
+        : ''
       if (
         isInteractiveZcodeComposerOutput(recentOutput) ||
-        isInteractiveZcodeComposerOutput(terminal?.preview ?? '')
+        isInteractiveZcodeComposerOutput(terminal?.preview ?? '') ||
+        isInteractiveZcodeComposerOutput(screenOutput)
       ) {
         return true
       }
-      await new Promise((resolve) => setTimeout(resolve, 100))
+      await new Promise((resolve) => setTimeout(resolve, 250))
     } while (Date.now() < deadline)
     return false
   }
@@ -107,14 +115,22 @@ export class OrcaRuntimeWithZcodeOrchestration extends OrcaRuntimeWithResolveWai
     }
   ): Promise<RuntimeTerminalCreate> {
     const worktree = await this.resolveWorktreeSelector(worktreeSelector)
+    // Kiro's shell integration otherwise replaces Orca's login shell with a
+    // nested `kiro-cli-term` PTY. The ZCode process then runs in that inner PTY,
+    // outside the terminal handle Orca supervises, so a healthy worker looks
+    // blank and fails readiness. This is the integration's own guard for an
+    // already-supervised shell; unlike Q_TERM it is not cleared by Q_NEW_SESSION.
+    const env = opts.agent === 'zcode' ? { PROCESS_LAUNCHED_BY_Q: '1' } : undefined
     if (opts.bareShell) {
       return this.createTerminal(`id:${worktree.id}`, {
         title: opts.title,
+        ...(env ? { env } : {}),
         ...(opts.surfaceOwner === false ? { surfaceOwner: false } : {})
       })
     }
     return this.createTerminal(`id:${worktree.id}`, {
       startupAgent: opts.agent,
+      ...(env ? { env } : {}),
       ...(opts.launchPreferences ? { launchPreferences: opts.launchPreferences } : {}),
       title: opts.title,
       ...(opts.surfaceOwner === false ? { surfaceOwner: false } : {})
@@ -174,7 +190,16 @@ export class OrcaRuntimeWithZcodeOrchestration extends OrcaRuntimeWithResolveWai
       if (isInteractiveZcodeComposerOutput(terminal?.preview ?? '')) {
         return true
       }
-      await new Promise((resolve) => setTimeout(resolve, 100))
+      const screen = await this.readTerminal(handle, { screen: true }).catch(() => null)
+      if (
+        screen &&
+        isInteractiveZcodeComposerOutput(
+          [...screen.tail, ...(screen.draft ? [screen.draft] : [])].join('\n')
+        )
+      ) {
+        return true
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250))
     } while (Date.now() < deadline)
     return false
   }

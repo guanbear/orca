@@ -101,13 +101,11 @@ export async function createExistingWorktreeWorkerTerminal(args: {
     warning: terminal.warning
   })
   if (args.interactiveAgentCommand) {
-    const shellReady = await args.runtime.waitForTerminal(terminal.handle, {
-      condition: 'tui-idle',
-      timeoutMs: 30_000
-    })
-    if (!shellReady.satisfied) {
-      throw new Error('interactive_agent_shell_not_ready')
-    }
+    // The daemon queues writes until the POSIX shell-ready gate opens. Waiting for
+    // `tui-idle` here is incorrect because this is deliberately a bare shell: it
+    // has no agent title or ready prompt and therefore cannot satisfy that agent
+    // readiness condition. Send the startup command now, then prove readiness from
+    // the launched process below.
     await args.runtime.sendTerminal(terminal.handle, {
       text: args.interactiveAgentCommand,
       enter: true
