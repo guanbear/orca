@@ -40,6 +40,12 @@ export type WorkerSetupReceipt = {
     | 'not_applicable'
 }
 
+export function getInteractiveAgentStartupTimeoutMs(agent: TuiAgent): number {
+  // The npm-distributed ZCode TUI performs provider and workspace discovery before
+  // rendering its composer. On a cold launch that can exceed the generic 30s budget.
+  return agent === 'zcode' ? 60_000 : 30_000
+}
+
 export function requireWorkerAuthority(runtime: OrcaRuntimeService, terminalHandle: string) {
   const authority = runtime.getOrchestrationDispatchAuthority(terminalHandle)
   const paneKey = authority?.paneKey ?? runtime.getTerminalPaneKey(terminalHandle)
@@ -106,7 +112,13 @@ export async function createExistingWorktreeWorkerTerminal(args: {
       text: args.interactiveAgentCommand,
       enter: true
     })
-    if (!(await args.runtime.waitForTerminalAgentProcess(terminal.handle, args.agent, 30_000))) {
+    if (
+      !(await args.runtime.waitForTerminalAgentProcess(
+        terminal.handle,
+        args.agent,
+        getInteractiveAgentStartupTimeoutMs(args.agent)
+      ))
+    ) {
       throw new Error('interactive_agent_start_failed')
     }
   }
