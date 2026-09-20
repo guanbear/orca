@@ -103,19 +103,51 @@ export class OrcaRuntimeWithZcodeOrchestration extends OrcaRuntimeWithResolveWai
     agent: TuiAgent,
     timeoutMs = 4_500
   ): Promise<boolean> {
+    const host = this.getWorktreeStartupReadinessHost()
     const deadline = Date.now() + Math.max(timeoutMs, 0)
-    do {
-      if (
-        (await waitForWorktreeStartupFollowup(
-          this.getWorktreeStartupReadinessHost(),
-          handle,
-          TUI_AGENT_CONFIG[agent].expectedProcess
-        )) !== null
-      ) {
+    const processReady = async (): Promise<boolean> => {
+      do {
+        if (
+          (await waitForWorktreeStartupFollowup(
+            host,
+            handle,
+            TUI_AGENT_CONFIG[agent].expectedProcess
+          )) !== null
+        ) {
+          return true
+        }
+      } while (Date.now() < deadline)
+      return false
+    }
+    if (agent !== 'zcode') {
+      return processReady()
+    }
+
+    // ZCode's npm launcher can remain the PTY foreground process even after the
+    // native `zcode-cli` child has rendered. Its composer marker is stronger
+    // readiness evidence than the wrapper process name and is version-stable.
+    let timer: NodeJS.Timeout | undefined
+    const settleOnlyWhenReady = async (candidate: Promise<boolean>): Promise<true> => {
+      if (await candidate) {
         return true
       }
-    } while (Date.now() < deadline)
-    return false
+      return new Promise<never>(() => {})
+    }
+    try {
+      return await Promise.race([
+        settleOnlyWhenReady(processReady()),
+        settleOnlyWhenReady(
+          waitForWorktreeStartupDraft(host, handle, agent).then((ptyId) => ptyId !== null)
+        ),
+        new Promise<boolean>((resolve) => {
+          timer = setTimeout(() => resolve(false), Math.max(timeoutMs, 0))
+        })
+      ])
+    } finally {
+      if (timer) {
+        clearTimeout(timer)
+      }
+    }
   }
 
   async waitForTerminalAgentInputReady(handle: string, agent: TuiAgent): Promise<boolean> {
