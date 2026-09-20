@@ -13,6 +13,10 @@ import { buildAgentStartupPlan } from '../../shared/tui-agent-startup'
 import { resolveLocalWindowsAgentStartupShell } from '../../shared/windows-terminal-shell'
 import type { RuntimeTerminalCreate, RuntimeTerminalSend } from '../../shared/runtime-types'
 import { resolveZcodePromptDelivery } from '../zcode/interactive-client'
+import {
+  waitForWorktreeStartupDraft,
+  waitForWorktreeStartupFollowup
+} from './runtime-worktree-startup-readiness'
 
 export class OrcaRuntimeWithZcodeOrchestration extends OrcaRuntimeWithResolveWaiter {
   async resolveOrchestrationPromptDelivery(
@@ -97,19 +101,22 @@ export class OrcaRuntimeWithZcodeOrchestration extends OrcaRuntimeWithResolveWai
   async waitForTerminalAgentProcess(
     handle: string,
     agent: TuiAgent,
-    timeoutMs = 4_500
+    _timeoutMs = 4_500
   ): Promise<boolean> {
     return (
-      (await this.waitForStartupFollowupReady(
+      (await waitForWorktreeStartupFollowup(
+        this.getWorktreeStartupReadinessHost(),
         handle,
-        TUI_AGENT_CONFIG[agent].expectedProcess,
-        timeoutMs
+        TUI_AGENT_CONFIG[agent].expectedProcess
       )) !== null
     )
   }
 
   async waitForTerminalAgentInputReady(handle: string, agent: TuiAgent): Promise<boolean> {
-    return (await this.waitForStartupDraftReady(handle, agent)) !== null
+    return (
+      (await waitForWorktreeStartupDraft(this.getWorktreeStartupReadinessHost(), handle, agent)) !==
+      null
+    )
   }
 
   async waitForTerminalProviderSession(
