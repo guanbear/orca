@@ -101,15 +101,21 @@ export class OrcaRuntimeWithZcodeOrchestration extends OrcaRuntimeWithResolveWai
   async waitForTerminalAgentProcess(
     handle: string,
     agent: TuiAgent,
-    _timeoutMs = 4_500
+    timeoutMs = 4_500
   ): Promise<boolean> {
-    return (
-      (await waitForWorktreeStartupFollowup(
-        this.getWorktreeStartupReadinessHost(),
-        handle,
-        TUI_AGENT_CONFIG[agent].expectedProcess
-      )) !== null
-    )
+    const deadline = Date.now() + Math.max(timeoutMs, 0)
+    do {
+      if (
+        (await waitForWorktreeStartupFollowup(
+          this.getWorktreeStartupReadinessHost(),
+          handle,
+          TUI_AGENT_CONFIG[agent].expectedProcess
+        )) !== null
+      ) {
+        return true
+      }
+    } while (Date.now() < deadline)
+    return false
   }
 
   async waitForTerminalAgentInputReady(handle: string, agent: TuiAgent): Promise<boolean> {
