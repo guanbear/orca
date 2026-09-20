@@ -43,7 +43,7 @@ export type WorkerSetupReceipt = {
 export function getInteractiveAgentStartupTimeoutMs(agent: TuiAgent): number {
   // The npm-distributed ZCode TUI performs provider and workspace discovery before
   // rendering its composer. On a cold launch that can exceed the generic 30s budget.
-  return agent === 'zcode' ? 60_000 : 30_000
+  return agent === 'zcode' ? 90_000 : 30_000
 }
 
 export function requireWorkerAuthority(runtime: OrcaRuntimeService, terminalHandle: string) {
