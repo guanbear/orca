@@ -12,13 +12,32 @@ import { requiresOrchestrationStartupPrompt } from '../../shared/tui-agent-orche
 import { buildAgentStartupPlan } from '../../shared/tui-agent-startup'
 import { resolveLocalWindowsAgentStartupShell } from '../../shared/windows-terminal-shell'
 import type { RuntimeTerminalCreate, RuntimeTerminalSend } from '../../shared/runtime-types'
-import { resolveZcodePromptDelivery } from '../zcode/interactive-client'
+import {
+  isInteractiveZcodeComposerOutput,
+  resolveZcodePromptDelivery
+} from '../zcode/interactive-client'
 import {
   waitForWorktreeStartupDraft,
   waitForWorktreeStartupFollowup
 } from './runtime-worktree-startup-readiness'
 
 export class OrcaRuntimeWithZcodeOrchestration extends OrcaRuntimeWithResolveWaiter {
+  async waitForZcodeComposerReady(handle: string, timeoutMs = 30_000): Promise<boolean> {
+    const host = this.getWorktreeStartupReadinessHost()
+    const ptyId = host.getPtyId(handle)
+    if (!ptyId) {
+      return false
+    }
+    const deadline = Date.now() + Math.max(timeoutMs, 0)
+    do {
+      if (isInteractiveZcodeComposerOutput(host.readRecentOutput(ptyId) ?? '')) {
+        return true
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    } while (Date.now() < deadline)
+    return false
+  }
+
   async resolveOrchestrationPromptDelivery(
     agent: TuiAgent,
     worktreeId: string
@@ -139,6 +158,7 @@ export class OrcaRuntimeWithZcodeOrchestration extends OrcaRuntimeWithResolveWai
         settleOnlyWhenReady(
           waitForWorktreeStartupDraft(host, handle, agent).then((ptyId) => ptyId !== null)
         ),
+        settleOnlyWhenReady(this.waitForZcodeComposerReady(handle, timeoutMs)),
         new Promise<boolean>((resolve) => {
           timer = setTimeout(() => resolve(false), Math.max(timeoutMs, 0))
         })
@@ -151,6 +171,9 @@ export class OrcaRuntimeWithZcodeOrchestration extends OrcaRuntimeWithResolveWai
   }
 
   async waitForTerminalAgentInputReady(handle: string, agent: TuiAgent): Promise<boolean> {
+    if (agent === 'zcode') {
+      return this.waitForZcodeComposerReady(handle)
+    }
     return (
       (await waitForWorktreeStartupDraft(this.getWorktreeStartupReadinessHost(), handle, agent)) !==
       null
