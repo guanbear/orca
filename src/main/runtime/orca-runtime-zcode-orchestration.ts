@@ -1,5 +1,7 @@
 // @ts-nocheck -- runtime mixin: the inherited surface is assembled across split OrcaRuntime classes.
 import { OrcaRuntimeWithResolveWaiter } from './orca-runtime-resolve-waiter'
+import { isShellProcess } from '../../shared/agent-detection'
+import { isExpectedAgentProcess } from '../../shared/agent-process-recognition'
 import type { AgentLaunchPreferences } from '../../shared/agent-session-host-authority'
 import { repoIsRemote } from '../../shared/agent-launch-remote'
 import type { TuiAgent } from '../../shared/tui-agent'
@@ -24,13 +26,10 @@ import {
 export class OrcaRuntimeWithZcodeOrchestration extends OrcaRuntimeWithResolveWaiter {
   async waitForZcodeComposerReady(handle: string, timeoutMs = 30_000): Promise<boolean> {
     const host = this.getWorktreeStartupReadinessHost()
-    const ptyId = host.getPtyId(handle)
-    if (!ptyId) {
-      return false
-    }
     const deadline = Date.now() + Math.max(timeoutMs, 0)
     do {
-      const recentOutput = host.readRecentOutput(ptyId) ?? ''
+      const ptyId = host.getPtyId(handle)
+      const recentOutput = ptyId ? (host.readRecentOutput(ptyId) ?? '') : ''
       const terminal = await this.showTerminal(handle).catch(() => null)
       if (
         isInteractiveZcodeComposerOutput(recentOutput) ||
@@ -147,32 +146,37 @@ export class OrcaRuntimeWithZcodeOrchestration extends OrcaRuntimeWithResolveWai
       return processReady()
     }
 
-    // ZCode's npm launcher can remain the PTY foreground process even after the
-    // native `zcode-cli` child has rendered. Its composer marker is stronger
-    // readiness evidence than the wrapper process name and is version-stable.
-    let timer: NodeJS.Timeout | undefined
-    const settleOnlyWhenReady = async (candidate: Promise<boolean>): Promise<true> => {
-      if (await candidate) {
+    // A background worker's handle can exist before its PTY mapping is visible
+    // to the daemon. Poll all durable readiness signals within one budget instead
+    // of taking a one-shot PTY snapshot and then waiting only for the timeout.
+    do {
+      const ptyId = host.getPtyId(handle)
+      if (ptyId) {
+        try {
+          const foregroundProcess = await host.getForegroundProcess(ptyId)
+          if (isExpectedAgentProcess(foregroundProcess, TUI_AGENT_CONFIG[agent].expectedProcess)) {
+            return true
+          }
+          if (
+            !isShellProcess(foregroundProcess ?? '') &&
+            ((await host.hasChildProcesses?.(ptyId).catch(() => false)) ?? false)
+          ) {
+            return true
+          }
+        } catch {
+          // PTY inspection can race process replacement; keep polling.
+        }
+        if (isInteractiveZcodeComposerOutput(host.readRecentOutput(ptyId) ?? '')) {
+          return true
+        }
+      }
+      const terminal = await this.showTerminal(handle).catch(() => null)
+      if (isInteractiveZcodeComposerOutput(terminal?.preview ?? '')) {
         return true
       }
-      return new Promise<never>(() => {})
-    }
-    try {
-      return await Promise.race([
-        settleOnlyWhenReady(processReady()),
-        settleOnlyWhenReady(
-          waitForWorktreeStartupDraft(host, handle, agent).then((ptyId) => ptyId !== null)
-        ),
-        settleOnlyWhenReady(this.waitForZcodeComposerReady(handle, timeoutMs)),
-        new Promise<boolean>((resolve) => {
-          timer = setTimeout(() => resolve(false), Math.max(timeoutMs, 0))
-        })
-      ])
-    } finally {
-      if (timer) {
-        clearTimeout(timer)
-      }
-    }
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    } while (Date.now() < deadline)
+    return false
   }
 
   async waitForTerminalAgentInputReady(handle: string, agent: TuiAgent): Promise<boolean> {
