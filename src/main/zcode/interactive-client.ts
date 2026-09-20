@@ -1,7 +1,7 @@
 import { execLocalPreflightCommandOrThrow } from '../ipc/preflight-command-exec'
 
 const INTERACTIVE_DISTRIBUTION_MARKER = /^zcode-app-cli\s+\S+/m
-const INTERACTIVE_COMPOSER_MARKERS = ['ZCODE', 'Ask a task about this workspace'] as const
+const INTERACTIVE_COMPOSER_PROMPT = 'Ask a task about this workspace'
 const INTERACTIVE_FAILURE_COOLDOWN_MS = 10 * 60 * 1000
 let interactiveUnavailableUntil = 0
 
@@ -10,7 +10,7 @@ export function isInteractiveZcodeVersionOutput(output: string): boolean {
 }
 
 export function isInteractiveZcodeComposerOutput(output: string): boolean {
-  return INTERACTIVE_COMPOSER_MARKERS.every((marker) => output.includes(marker))
+  return output.includes(INTERACTIVE_COMPOSER_PROMPT)
 }
 
 export async function hasInteractiveZcodeClient(): Promise<boolean> {
