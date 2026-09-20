@@ -31,7 +31,7 @@ describe('ZCode interactive client detection', () => {
       )
     ).toBe(true)
     expect(isInteractiveZcodeComposerOutput('ZCODE is starting')).toBe(false)
-    expect(isInteractiveZcodeComposerOutput('Ask a task about this workspace')).toBe(false)
+    expect(isInteractiveZcodeComposerOutput('Ask a task about this workspace')).toBe(true)
   })
 
   it('uses the local interactive client when its capability probe succeeds', async () => {

@@ -30,7 +30,12 @@ export class OrcaRuntimeWithZcodeOrchestration extends OrcaRuntimeWithResolveWai
     }
     const deadline = Date.now() + Math.max(timeoutMs, 0)
     do {
-      if (isInteractiveZcodeComposerOutput(host.readRecentOutput(ptyId) ?? '')) {
+      const recentOutput = host.readRecentOutput(ptyId) ?? ''
+      const terminal = await this.showTerminal(handle).catch(() => null)
+      if (
+        isInteractiveZcodeComposerOutput(recentOutput) ||
+        isInteractiveZcodeComposerOutput(terminal?.preview ?? '')
+      ) {
         return true
       }
       await new Promise((resolve) => setTimeout(resolve, 100))
