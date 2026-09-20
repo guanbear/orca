@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  isInteractiveZcodeComposerOutput,
   isInteractiveZcodeVersionOutput,
   markInteractiveZcodeUnavailable,
   resetInteractiveZcodeAvailabilityForTests,
@@ -21,6 +22,16 @@ describe('ZCode interactive client detection', () => {
   it('fails closed for empty or unrelated version output', () => {
     expect(isInteractiveZcodeVersionOutput('')).toBe(false)
     expect(isInteractiveZcodeVersionOutput('some-zcode-wrapper 1.0.0')).toBe(false)
+  })
+
+  it('recognizes the stable interactive composer text without relying on ANSI frames', () => {
+    expect(
+      isInteractiveZcodeComposerOutput(
+        '╭─ ◆ ZCODE v3.14.0-27 ─╮\n│ Ask a task about this workspace │'
+      )
+    ).toBe(true)
+    expect(isInteractiveZcodeComposerOutput('ZCODE is starting')).toBe(false)
+    expect(isInteractiveZcodeComposerOutput('Ask a task about this workspace')).toBe(false)
   })
 
   it('uses the local interactive client when its capability probe succeeds', async () => {
