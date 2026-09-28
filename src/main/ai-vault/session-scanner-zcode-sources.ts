@@ -3,7 +3,6 @@ import { join } from 'node:path'
 import type { AiVaultScanIssue } from '../../shared/ai-vault-types'
 import { throwIfSignalAborted } from '../../shared/abort-signal-reason'
 import { wslGatedAccess } from '../native-chat/wsl-transcript-fs-access'
-import { WslTranscriptFsError } from '../native-chat/wsl-transcript-fs-gate'
 import { listZcodeSqliteSessionsViaWorker } from './session-scanner-opencode-sqlite-worker-spawn'
 import type { AiVaultScanOptions, SessionFileDiscovery } from './session-scanner-types'
 
@@ -43,9 +42,14 @@ async function zcodeDatabaseExists(
     return await wslGatedAccess(dbPath, 'scan', signal)
   } catch (error) {
     throwIfSignalAborted(signal)
-    if (error instanceof WslTranscriptFsError) {
-      issues.push({ agent: 'zcode', path: dbPath, message: error.message })
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      return false
     }
+    issues.push({
+      agent: 'zcode',
+      path: dbPath,
+      message: error instanceof Error ? error.message : String(error)
+    })
     return false
   }
 }

@@ -154,12 +154,13 @@ export function readOpenCodeSessionMessages(
   sessionId: string,
   agent: 'opencode' | 'zcode' = 'opencode'
 ): TranscriptMessage[] {
+  const agentName = agent === 'zcode' ? 'ZCode' : 'OpenCode'
   if (!canReadOpenCodeMessageParts(db)) {
     // Thrown for the same reason the part limit below throws: an empty capture
     // returned here is committed under a complete-read cursor, so the session
     // stays out of search with nothing on its row to say why and no retry.
     throw new Error(
-      `OpenCode session ${sessionId} uses an unreadable message-part schema; its transcript was not read.`
+      `${agentName} session ${sessionId} uses an unreadable message-part schema; its transcript was not read.`
     )
   }
   const rows = db
@@ -167,7 +168,7 @@ export function readOpenCodeSessionMessages(
     .all(sessionId, OPENCODE_CAPTURE_RECORD_LIMIT + 1)
   if (rows.length > OPENCODE_CAPTURE_RECORD_LIMIT) {
     throw new Error(
-      `OpenCode session ${sessionId} holds more than ${OPENCODE_CAPTURE_RECORD_LIMIT} text parts; its transcript was not read.`
+      `${agentName} session ${sessionId} holds more than ${OPENCODE_CAPTURE_RECORD_LIMIT} text parts; its transcript was not read.`
     )
   }
 
@@ -183,7 +184,7 @@ export function readOpenCodeSessionMessages(
     captured += message.text.length
     if (captured > OPENCODE_CAPTURE_TEXT_LIMIT) {
       throw new Error(
-        `OpenCode session ${sessionId} decodes to more than ${OPENCODE_CAPTURE_TEXT_LIMIT} characters; its transcript was not read.`
+        `${agentName} session ${sessionId} decodes to more than ${OPENCODE_CAPTURE_TEXT_LIMIT} characters; its transcript was not read.`
       )
     }
     messages.push(message)
