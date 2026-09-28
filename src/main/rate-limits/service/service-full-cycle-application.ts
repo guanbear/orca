@@ -1,6 +1,9 @@
 import { RateLimitServiceFullCyclePreparation } from './service-full-cycle-preparation'
 import { deriveAntigravityRateLimits } from '../antigravity-usage-mirror'
-import { settleSiblingProviderResult, type SettledProviderResult } from './service-sibling-provider-result'
+import {
+  settleSiblingProviderResult,
+  type SettledProviderResult
+} from './service-sibling-provider-result'
 import type { InternalRateLimitState, ProviderRateLimits } from './service-types'
 
 export abstract class RateLimitServiceFullCycleApplication extends RateLimitServiceFullCyclePreparation {

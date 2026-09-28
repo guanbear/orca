@@ -321,9 +321,7 @@ describe('RateLimitService', () => {
     vi.mocked(fetchClaudeRateLimits).mockResolvedValueOnce(okProvider('claude', 10, Date.now()))
     vi.mocked(fetchCodexRateLimits).mockResolvedValueOnce(okProvider('codex', 20, Date.now()))
     vi.mocked(fetchGeminiRateLimits).mockResolvedValueOnce(okProvider('gemini', 30, Date.now()))
-    vi.mocked(fetchOpenCodeGoRateLimits).mockResolvedValueOnce(
-      okProvider('opencode-go', 40, Date.now())
-    )
+    vi.mocked(fetchOpenCodeGoUsage).mockResolvedValueOnce(okProvider('opencode-go', 40, Date.now()))
     vi.mocked(fetchKimiRateLimits).mockResolvedValueOnce(okProvider('kimi', 50, Date.now()))
     vi.mocked(fetchMiniMaxRateLimits).mockResolvedValueOnce(okProvider('minimax', 60, Date.now()))
     vi.mocked(fetchKiroRateLimits).mockReturnValueOnce(kiro.promise)
