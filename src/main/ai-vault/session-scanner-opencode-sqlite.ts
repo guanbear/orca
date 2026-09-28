@@ -74,10 +74,11 @@ function sessionNumberColumnSelect(db: SyncDatabase, columnName: string): string
   return columnExists(db, 'session', columnName) ? `s.${columnName}` : '0'
 }
 
-function buildSessionQuery(db: SyncDatabase): string {
+function buildSessionQuery(db: SyncDatabase, agent: 'opencode' | 'zcode'): string {
   const messageCountSubquery = canCountOpenCodeMessages(db)
     ? `(SELECT COUNT(*) FROM message m
         WHERE m.session_id = s.id
+          ${agent === 'zcode' ? "AND COALESCE(json_extract(m.data, '$.semantics.transcriptVisibility'), 'visible') != 'hidden'" : ''}
           AND json_extract(m.data, '$.role') IN ('user','assistant'))`
     : '0'
   return `SELECT s.id,
@@ -150,7 +151,11 @@ export function extractPartText(partData: string): string | null {
   }
 }
 
-function readFirstUserPromptFromOpenCodeDb(db: SyncDatabase, sessionId: string): string | null {
+function readFirstUserPromptFromOpenCodeDb(
+  db: SyncDatabase,
+  sessionId: string,
+  agent: 'opencode' | 'zcode'
+): string | null {
   if (!canReadOpenCodeMessageParts(db)) {
     return null
   }
@@ -168,6 +173,7 @@ function readFirstUserPromptFromOpenCodeDb(db: SyncDatabase, sessionId: string):
                  FROM message m
                  JOIN part fp ON fp.message_id = m.id
                  WHERE m.session_id = ?
+                   ${agent === 'zcode' ? "AND COALESCE(json_extract(m.data, '$.semantics.transcriptVisibility'), 'visible') != 'hidden'" : ''}
                    AND json_extract(m.data, '$.role') = 'user'
                    AND json_extract(fp.data, '$.type') = 'text'
                  ORDER BY m.time_created ASC, m.id ASC
@@ -195,7 +201,7 @@ function readFirstUserPromptFromOpenCodeDb(db: SyncDatabase, sessionId: string):
   }
 }
 
-function buildPreviewQuery(db: SyncDatabase): string | null {
+function buildPreviewQuery(db: SyncDatabase, agent: 'opencode' | 'zcode'): string | null {
   if (!canReadOpenCodeMessageParts(db)) {
     return null
   }
@@ -206,6 +212,7 @@ function buildPreviewQuery(db: SyncDatabase): string | null {
                  json_extract(m.data, '$.summary.body') AS summary_body
           FROM (SELECT id, data FROM message
                 WHERE session_id = ?
+                ${agent === 'zcode' ? "AND COALESCE(json_extract(data, '$.semantics.transcriptVisibility'), 'visible') != 'hidden'" : ''}
                 ORDER BY time_created DESC, id DESC
                 LIMIT ${OPENCODE_SQLITE_PREVIEW_MESSAGE_WINDOW}) m
           JOIN part p ON p.message_id = m.id
@@ -231,6 +238,7 @@ export async function parseOpenCodeSqliteSession(args: {
   dbPath: string
   sessionId: string
   platform: NodeJS.Platform
+  agent?: 'opencode' | 'zcode'
 }): Promise<AiVaultSession | null> {
   return readOpenCodeDatabase({
     dbPath: args.dbPath,
@@ -245,12 +253,14 @@ export function readOpenCodeSqliteSession(args: {
   dbPath: string
   sessionId: string
   platform: NodeJS.Platform
+  agent?: 'opencode' | 'zcode'
 }): AiVaultSession | null {
   const { db, dbPath, sessionId, platform } = args
   if (!canReadOpenCodeSessions(db)) {
     return null
   }
-  const row = db.prepare(buildSessionQuery(db)).get(sessionId) as SessionRow | undefined
+  const agent = args.agent ?? 'opencode'
+  const row = db.prepare(buildSessionQuery(db, agent)).get(sessionId) as SessionRow | undefined
   if (!row || row.id !== sessionId) {
     return null
   }
@@ -262,7 +272,7 @@ export function readOpenCodeSqliteSession(args: {
   // Why: discovery uses a synthetic db#session path only for parser routing.
   // The UI's log open/reveal actions need a real filesystem path.
   const accumulator = createAccumulator({
-    agent: 'opencode',
+    agent: args.agent ?? 'opencode',
     file: {
       path: dbPath,
       mtimeMs,
@@ -279,7 +289,7 @@ export function readOpenCodeSqliteSession(args: {
   updateTimeline(accumulator, row.time_created)
   updateTimeline(accumulator, row.time_updated)
 
-  const previewSql = buildPreviewQuery(db)
+  const previewSql = buildPreviewQuery(db, agent)
   if (previewSql) {
     // Why: SQL already dropped anything older than the newest-N window, so the
     // accumulator never shifts and cannot detect the truncation itself. Ask for
@@ -322,7 +332,7 @@ export function readOpenCodeSqliteSession(args: {
   // Why: list preview only joins the newest messages. On-demand copy needs the
   // session's earliest real user text part, not a later turn still in the window.
   if (shouldCaptureFullFirstUserPrompt()) {
-    accumulator.firstUserPrompt = readFirstUserPromptFromOpenCodeDb(db, sessionId)
+    accumulator.firstUserPrompt = readFirstUserPromptFromOpenCodeDb(db, sessionId, agent)
   }
 
   return finalizeSession(accumulator, platform)
