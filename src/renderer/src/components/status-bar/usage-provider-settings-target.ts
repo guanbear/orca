@@ -22,8 +22,8 @@ export function getUsageProviderAccountsSectionId(
       return 'accounts-cursor'
     case 'kimi':
     case 'kiro':
-      // Why: Orca must not mutate Kimi's CLI-owned credential lifecycle.
-      // Kiro likewise owns its CLI credential lifecycle.
+    case 'zcode':
+      // These CLIs own their credential lifecycles.
       return null
   }
 }

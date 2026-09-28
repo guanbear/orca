@@ -111,6 +111,7 @@ export type InternalRateLimitState = {
   grok: ProviderRateLimits | null
   cursor: ProviderRateLimits | null
   kiro: ProviderRateLimits | null
+  zcode: ProviderRateLimits | null
 }
 
 export function normalizePollingInterval(ms: number): number {

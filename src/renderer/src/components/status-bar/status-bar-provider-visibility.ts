@@ -36,6 +36,7 @@ type UsageProviderSnapshots = {
   cursor: ProviderRateLimits | null | undefined
   // Optional for renderer HMR against an older main process and persisted test fixtures.
   kiro?: ProviderRateLimits | null
+  zcode?: ProviderRateLimits | null
 }
 
 type UsageProviderId = ProviderRateLimits['provider']
@@ -184,7 +185,8 @@ export function isUsageEmptyState(
     isProviderSnapshotPending(providers.minimax) ||
     isProviderSnapshotPending(providers.grok) ||
     isProviderSnapshotPending(providers.cursor) ||
-    (providers.kiro !== undefined && isProviderSnapshotPending(providers.kiro))
+    (providers.kiro !== undefined && isProviderSnapshotPending(providers.kiro)) ||
+    (providers.zcode !== undefined && isProviderSnapshotPending(providers.zcode))
   ) {
     return false
   }
@@ -199,6 +201,7 @@ export function isUsageEmptyState(
     !isProviderConfigured(providers.minimax) &&
     !isProviderConfigured(providers.grok) &&
     !isProviderConfigured(providers.cursor) &&
-    !isProviderConfigured(providers.kiro)
+    !isProviderConfigured(providers.kiro) &&
+    !isProviderConfigured(providers.zcode)
   )
 }

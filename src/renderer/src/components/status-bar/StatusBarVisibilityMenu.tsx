@@ -145,6 +145,18 @@ export function StatusBarVisibilityMenu({
             {translate('auto.components.status.bar.StatusBar.kiroUsageMenu', 'Kiro Usage')}
           </DropdownMenuCheckboxItem>
         )}
+        {isStatusBarItemAvailable('zcode', detectedAgentIds) && (
+          <DropdownMenuCheckboxItem
+            checked={statusBarItems.includes('zcode')}
+            onCheckedChange={() => {
+              recordFeatureInteraction('usage-tracking')
+              toggleStatusBarItem('zcode')
+            }}
+          >
+            <AgentIcon agent="zcode" size={14} />
+            {translate('auto.components.status.bar.StatusBar.zcodeUsageMenu', 'ZCode Usage')}
+          </DropdownMenuCheckboxItem>
+        )}
         <DropdownMenuCheckboxItem
           checked={statusBarItems.includes('cursor')}
           onCheckedChange={() => {

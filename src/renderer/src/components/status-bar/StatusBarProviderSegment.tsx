@@ -87,6 +87,8 @@ export function getProviderLetter(provider: ProviderRateLimits['provider']): str
       return 'U'
     case 'kiro':
       return 'Q'
+    case 'zcode':
+      return 'Z'
     case 'codex':
       return 'X'
   }

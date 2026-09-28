@@ -40,7 +40,8 @@ export abstract class RateLimitServiceFullCycleApplication extends RateLimitServ
       ],
       grokResultPromise,
       cursorResultPromise,
-      kiroResultPromise
+      kiroResultPromise,
+      zcodeResultPromise
     } = prepared
     if (signal.aborted) {
       return
@@ -198,23 +199,35 @@ export abstract class RateLimitServiceFullCycleApplication extends RateLimitServ
     })
 
     await Promise.all([
-      this.applyGrokAndCursorResults(grokResultPromise, cursorResultPromise, previousState, signal),
+      this.applyGrokCursorAndZcodeResults(
+        grokResultPromise,
+        cursorResultPromise,
+        zcodeResultPromise,
+        previousState,
+        signal
+      ),
       this.applyKiroResult(kiroResultPromise, previousState.kiro, signal)
     ])
   }
 
-  private async applyGrokAndCursorResults(
+  private async applyGrokCursorAndZcodeResults(
     grokResultPromise: Promise<SettledProviderResult>,
     cursorResultPromise: Promise<SettledProviderResult>,
-    previousState: Pick<InternalRateLimitState, 'grok' | 'cursor'>,
+    zcodeResultPromise: Promise<SettledProviderResult>,
+    previousState: Pick<InternalRateLimitState, 'grok' | 'cursor' | 'zcode'>,
     signal: AbortSignal
   ): Promise<void> {
-    const [grokSettled, cursorSettled] = await Promise.all([grokResultPromise, cursorResultPromise])
+    const [grokSettled, cursorSettled, zcodeSettled] = await Promise.all([
+      grokResultPromise,
+      cursorResultPromise,
+      zcodeResultPromise
+    ])
     if (signal.aborted) {
       return
     }
     const grok = settleSiblingProviderResult('grok', grokSettled)
     const cursor = settleSiblingProviderResult('cursor', cursorSettled)
+    const zcode = settleSiblingProviderResult('zcode', zcodeSettled)
     // A changed Cursor identity must not inherit another account's stale figures.
     const previousCursorAccount = previousState.cursor?.usageMetadata?.authProvenance
     const cursorAccount = cursor.usageMetadata?.authProvenance
@@ -222,12 +235,23 @@ export abstract class RateLimitServiceFullCycleApplication extends RateLimitServ
       previousCursorAccount !== undefined &&
       cursorAccount !== undefined &&
       previousCursorAccount !== cursorAccount
+    const previousZcodeAccount = previousState.zcode?.usageMetadata?.authProvenance
+    const zcodeAccount = zcode.usageMetadata?.authProvenance
+    const sameZcodeAccount =
+      previousZcodeAccount !== undefined &&
+      zcodeAccount !== undefined &&
+      previousZcodeAccount === zcodeAccount
     this.trackActiveFailureStreak('grok', grok)
     this.trackActiveFailureStreak('cursor', cursor)
+    this.trackActiveFailureStreak('zcode', zcode)
     this.updateState({
       ...this.state,
       grok: this.applyStalePolicy(grok, previousState.grok),
-      cursor: cursorAccountChanged ? cursor : this.applyStalePolicy(cursor, previousState.cursor)
+      cursor: cursorAccountChanged ? cursor : this.applyStalePolicy(cursor, previousState.cursor),
+      zcode:
+        zcode.status === 'error' && !sameZcodeAccount
+          ? zcode
+          : this.applyStalePolicy(zcode, previousState.zcode)
     })
   }
 

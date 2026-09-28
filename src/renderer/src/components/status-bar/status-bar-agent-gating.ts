@@ -14,7 +14,8 @@ const CLI_GATED_ITEMS: ReadonlySet<StatusBarItem> = new Set([
   'kimi',
   'antigravity',
   'grok',
-  'kiro'
+  'kiro',
+  'zcode'
 ])
 
 export function isStatusBarItemAvailable(

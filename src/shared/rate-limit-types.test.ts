@@ -18,6 +18,7 @@ describe('RateLimitState', () => {
       grok: null,
       cursor: null,
       kiro: null,
+      zcode: null,
       minimaxCookieConfigured: false,
       minimaxApiKeyConfigured: false,
       opencodeGoApiKeyConfigured: false,

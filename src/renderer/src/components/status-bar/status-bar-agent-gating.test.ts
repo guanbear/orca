@@ -21,6 +21,7 @@ describe('isStatusBarItemAvailable', () => {
     expect(isStatusBarItemAvailable('antigravity', null)).toBe(true)
     expect(isStatusBarItemAvailable('grok', null)).toBe(true)
     expect(isStatusBarItemAvailable('kiro', null)).toBe(true)
+    expect(isStatusBarItemAvailable('zcode', null)).toBe(true)
   })
 
   it('hides CLI items not detected on PATH', () => {
@@ -30,6 +31,7 @@ describe('isStatusBarItemAvailable', () => {
     expect(isStatusBarItemAvailable('antigravity', ['claude', 'codex'])).toBe(false)
     expect(isStatusBarItemAvailable('grok', ['claude', 'kimi'])).toBe(false)
     expect(isStatusBarItemAvailable('kiro', ['claude', 'kimi'])).toBe(false)
+    expect(isStatusBarItemAvailable('zcode', ['claude', 'kimi'])).toBe(false)
   })
 
   it('shows CLI items detected on PATH', () => {
@@ -39,5 +41,6 @@ describe('isStatusBarItemAvailable', () => {
     expect(isStatusBarItemAvailable('antigravity', ['antigravity'])).toBe(true)
     expect(isStatusBarItemAvailable('grok', ['grok'])).toBe(true)
     expect(isStatusBarItemAvailable('kiro', ['kiro'])).toBe(true)
+    expect(isStatusBarItemAvailable('zcode', ['zcode'])).toBe(true)
   })
 })
