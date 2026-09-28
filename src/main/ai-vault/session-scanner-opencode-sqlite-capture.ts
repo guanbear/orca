@@ -10,6 +10,7 @@ import { readOpenCodeDatabase } from './session-scanner-opencode-sqlite-open'
 import { canReadOpenCodeMessageParts } from './session-scanner-opencode-sqlite-schema'
 import type { TranscriptMessage, TranscriptMessageRole } from './session-transcript-consumers'
 import { boundedText, toolCallText } from './session-transcript-message-content'
+import { zcodeVisibleMessageFilter } from './session-scanner-zcode-visibility'
 import type SyncDatabase from '../sqlite/sync-database'
 
 // Why: the session list needs the newest few messages, and the search index
@@ -130,7 +131,7 @@ function buildCaptureQuery(agent: 'opencode' | 'zcode'): string {
           FROM message m
           JOIN part p ON p.message_id = m.id
           WHERE m.session_id = ?
-            ${agent === 'zcode' ? "AND COALESCE(json_extract(m.data, '$.semantics.transcriptVisibility'), 'visible') != 'hidden'" : ''}
+            ${zcodeVisibleMessageFilter(agent)}
             AND json_extract(m.data, '$.role') IN ('user','assistant')
             AND json_extract(p.data, '$.type') IN ${OPENCODE_CAPTURE_PART_TYPES}
           ORDER BY m.time_created ASC, m.id ASC, p.time_created ASC, p.rowid ASC

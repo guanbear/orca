@@ -15,6 +15,7 @@ import {
   canReadOpenCodeMessageParts
 } from './session-scanner-opencode-sqlite-schema'
 import { normalizeTitleText } from './session-scanner-values'
+import { zcodeVisibleMessageFilter } from './session-scanner-zcode-visibility'
 import type SyncDatabase from '../sqlite/sync-database'
 import { columnExists, tableExists } from '../opencode-usage/schema-helpers'
 
@@ -78,7 +79,7 @@ function buildSessionQuery(db: SyncDatabase, agent: 'opencode' | 'zcode'): strin
   const messageCountSubquery = canCountOpenCodeMessages(db)
     ? `(SELECT COUNT(*) FROM message m
         WHERE m.session_id = s.id
-          ${agent === 'zcode' ? "AND COALESCE(json_extract(m.data, '$.semantics.transcriptVisibility'), 'visible') != 'hidden'" : ''}
+          ${zcodeVisibleMessageFilter(agent)}
           AND json_extract(m.data, '$.role') IN ('user','assistant'))`
     : '0'
   return `SELECT s.id,
@@ -173,7 +174,7 @@ function readFirstUserPromptFromOpenCodeDb(
                  FROM message m
                  JOIN part fp ON fp.message_id = m.id
                  WHERE m.session_id = ?
-                   ${agent === 'zcode' ? "AND COALESCE(json_extract(m.data, '$.semantics.transcriptVisibility'), 'visible') != 'hidden'" : ''}
+                   ${zcodeVisibleMessageFilter(agent)}
                    AND json_extract(m.data, '$.role') = 'user'
                    AND json_extract(fp.data, '$.type') = 'text'
                  ORDER BY m.time_created ASC, m.id ASC
@@ -212,7 +213,7 @@ function buildPreviewQuery(db: SyncDatabase, agent: 'opencode' | 'zcode'): strin
                  json_extract(m.data, '$.summary.body') AS summary_body
           FROM (SELECT id, data FROM message
                 WHERE session_id = ?
-                ${agent === 'zcode' ? "AND COALESCE(json_extract(data, '$.semantics.transcriptVisibility'), 'visible') != 'hidden'" : ''}
+                ${zcodeVisibleMessageFilter(agent, 'data')}
                 ORDER BY time_created DESC, id DESC
                 LIMIT ${OPENCODE_SQLITE_PREVIEW_MESSAGE_WINDOW}) m
           JOIN part p ON p.message_id = m.id
