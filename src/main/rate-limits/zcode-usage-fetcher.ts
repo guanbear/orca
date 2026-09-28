@@ -1,3 +1,4 @@
+import { createHmac, randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -5,6 +6,7 @@ import type { ProviderRateLimits, RateLimitWindow } from '../../shared/rate-limi
 
 const API_TIMEOUT_MS = 15_000
 const SUPPORTED_HOSTS = new Set(['api.z.ai', 'open.bigmodel.cn', 'dev.bigmodel.cn'])
+const CREDENTIAL_IDENTITY_KEY = randomBytes(32)
 
 type ZcodeProviderOptions = {
   apiKey?: unknown
@@ -40,6 +42,7 @@ type QuotaResponse = {
 type ZcodeUsageCredentials = {
   apiKey: string
   quotaUrl: string
+  authProvenance: string
 }
 
 function unavailable(error: string): ProviderRateLimits {
@@ -55,7 +58,11 @@ function unavailable(error: string): ProviderRateLimits {
   }
 }
 
-function failed(error: string, failureKind: 'network' | 'server' | 'parse'): ProviderRateLimits {
+function failed(
+  error: string,
+  failureKind: 'network' | 'server' | 'parse',
+  authProvenance: string
+): ProviderRateLimits {
   return {
     provider: 'zcode',
     session: null,
@@ -64,7 +71,7 @@ function failed(error: string, failureKind: 'network' | 'server' | 'parse'): Pro
     updatedAt: Date.now(),
     error,
     status: 'error',
-    usageMetadata: { source: 'web', failureKind }
+    usageMetadata: { source: 'web', failureKind, authProvenance }
   }
 }
 
@@ -77,44 +84,48 @@ function readCredentials(configPath: string): ZcodeUsageCredentials | null {
   }
 
   const mainModel = typeof config.model === 'string' ? config.model : config.model?.main
-  const mainProvider = typeof mainModel === 'string' ? mainModel.split('/', 1)[0] : null
+  const delimiter = typeof mainModel === 'string' ? mainModel.indexOf('/') : -1
+  const mainProvider =
+    typeof mainModel === 'string' && delimiter > 0 && delimiter < mainModel.length - 1
+      ? mainModel.slice(0, delimiter)
+      : null
   // A quota from another configured account must never appear as the selected model's quota.
-  const candidates = mainProvider
-    ? Object.entries(config.provider ?? {}).filter(([id]) => id === mainProvider)
-    : Object.entries(config.provider ?? {})
-  if (!mainProvider && candidates.length !== 1) {
+  if (!mainProvider) {
     return null
   }
-
-  for (const [, provider] of candidates) {
-    const apiKey = provider.options?.apiKey
-    const baseURL = provider.options?.baseURL
-    if (
-      typeof apiKey !== 'string' ||
-      !apiKey.trim() ||
-      /[\r\n]/.test(apiKey) ||
-      typeof baseURL !== 'string'
-    ) {
-      continue
-    }
-    try {
-      const parsed = new URL(baseURL)
-      if (
-        parsed.protocol !== 'https:' ||
-        !SUPPORTED_HOSTS.has(parsed.hostname) ||
-        (parsed.port !== '' && parsed.port !== '443')
-      ) {
-        continue
-      }
-      return {
-        apiKey: apiKey.trim(),
-        quotaUrl: `${parsed.origin}/api/monitor/usage/quota/limit`
-      }
-    } catch {
-      continue
-    }
+  const provider = config.provider?.[mainProvider]
+  if (!provider) {
+    return null
   }
-  return null
+  const apiKey = provider.options?.apiKey
+  const baseURL = provider.options?.baseURL
+  if (
+    typeof apiKey !== 'string' ||
+    !apiKey.trim() ||
+    /[\r\n]/.test(apiKey) ||
+    typeof baseURL !== 'string'
+  ) {
+    return null
+  }
+  try {
+    const parsed = new URL(baseURL)
+    if (
+      parsed.protocol !== 'https:' ||
+      !SUPPORTED_HOSTS.has(parsed.hostname) ||
+      (parsed.port !== '' && parsed.port !== '443')
+    ) {
+      return null
+    }
+    return {
+      apiKey: apiKey.trim(),
+      quotaUrl: `${parsed.origin}/api/monitor/usage/quota/limit`,
+      authProvenance: createHmac('sha256', CREDENTIAL_IDENTITY_KEY)
+        .update(JSON.stringify([mainProvider, parsed.origin, apiKey.trim()]))
+        .digest('hex')
+    }
+  } catch {
+    return null
+  }
 }
 
 function asNumber(value: unknown): number | null {
@@ -163,10 +174,12 @@ function asWindow(limit: QuotaLimit | undefined): RateLimitWindow | null {
   if (usedPercent === null || windowMinutes === null) {
     return null
   }
+  const reset = asResetTime(limit.nextResetTime)
   return {
     usedPercent,
     windowMinutes,
-    resetsAt: asResetTime(limit.nextResetTime),
+    resetsAt:
+      windowMinutes === 300 && reset !== null && reset > Date.now() + 301 * 60_000 ? null : reset,
     resetDescription: null
   }
 }
@@ -199,18 +212,26 @@ export async function fetchZcodeRateLimits(
       signal
     })
   } catch (error) {
-    return failed(error instanceof Error ? error.message : 'ZCode quota request failed', 'network')
+    return failed(
+      error instanceof Error ? error.message : 'ZCode quota request failed',
+      'network',
+      credentials.authProvenance
+    )
   }
 
   if (!response.ok) {
-    return failed(`ZCode quota request failed (${response.status})`, 'server')
+    return failed(
+      `ZCode quota request failed (${response.status})`,
+      'server',
+      credentials.authProvenance
+    )
   }
 
   let payload: QuotaResponse
   try {
     payload = (await response.json()) as QuotaResponse
   } catch {
-    return failed('Could not parse ZCode quota response', 'parse')
+    return failed('Could not parse ZCode quota response', 'parse', credentials.authProvenance)
   }
   if (
     payload.success !== true ||
@@ -218,7 +239,7 @@ export async function fetchZcodeRateLimits(
     !Array.isArray(payload.data?.limits)
   ) {
     const message = typeof payload.msg === 'string' ? payload.msg : 'Invalid ZCode quota response'
-    return failed(message, 'parse')
+    return failed(message, 'parse', credentials.authProvenance)
   }
 
   const limits = payload.data.limits.filter(
@@ -233,7 +254,11 @@ export async function fetchZcodeRateLimits(
   const weekly = planLimits.find((limit) => limit.windowMinutes === 10080) ?? null
   const monthly = asWindow(limits.find((limit) => limit.type === 'TIME_LIMIT'))
   if (!session && !weekly && !monthly) {
-    return failed('ZCode quota response contained no usable limits', 'parse')
+    return failed(
+      'ZCode quota response contained no usable limits',
+      'parse',
+      credentials.authProvenance
+    )
   }
 
   return {
@@ -245,6 +270,10 @@ export async function fetchZcodeRateLimits(
     updatedAt: Date.now(),
     error: null,
     status: 'ok',
-    usageMetadata: { source: 'web', credentialSource: configPath }
+    usageMetadata: {
+      source: 'web',
+      credentialSource: configPath,
+      authProvenance: credentials.authProvenance
+    }
   }
 }

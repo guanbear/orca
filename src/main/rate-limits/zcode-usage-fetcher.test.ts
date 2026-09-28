@@ -51,6 +51,20 @@ describe('fetchZcodeRateLimits', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it('does not infer an account from the only configured provider without a selected model', async () => {
+    writeConfig({
+      model: {},
+      provider: {
+        zai: { options: { apiKey: 'sole-account', baseURL: 'https://api.z.ai/v1' } }
+      }
+    })
+
+    const result = await fetchZcodeRateLimits({ configPath })
+
+    expect(result.status).toBe('unavailable')
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it('queries the matching quota endpoint and maps rolling, weekly, and MCP limits', async () => {
     writeConfig()
     vi.mocked(fetch).mockResolvedValue(
@@ -148,6 +162,33 @@ describe('fetchZcodeRateLimits', () => {
     expect(result.monthly).toBeNull()
   })
 
+  it('drops an implausible five-hour reset without discarding the quota value', async () => {
+    writeConfig()
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            limits: [
+              {
+                type: 'CREDIT_LIMIT',
+                unit: 3,
+                number: 5,
+                percentage: 25,
+                nextResetTime: Date.now() + 10 * 60 * 60_000
+              }
+            ]
+          }
+        })
+      )
+    )
+
+    const result = await fetchZcodeRateLimits({ configPath })
+
+    expect(result.session?.usedPercent).toBe(25)
+    expect(result.session?.resetsAt).toBeNull()
+  })
+
   it('selects the legacy string model provider when several accounts are configured', async () => {
     writeConfig({
       model: 'zai/GLM-5.3',
@@ -217,6 +258,26 @@ describe('fetchZcodeRateLimits', () => {
     expect(result.status).toBe('error')
     expect(result.error).toBe('ZCode quota request failed (401)')
     expect(JSON.stringify(result)).not.toContain('never-log-me')
+  })
+
+  it('changes the non-secret account identity when the selected key changes', async () => {
+    writeConfig()
+    vi.mocked(fetch).mockResolvedValue(new Response('denied', { status: 401 }))
+
+    const first = await fetchZcodeRateLimits({ configPath })
+    writeConfig({
+      provider: {
+        'bigmodel-coding-plan': {
+          options: { apiKey: 'new-key', baseURL: 'https://open.bigmodel.cn/api/anthropic' }
+        }
+      }
+    })
+    const second = await fetchZcodeRateLimits({ configPath })
+
+    expect(first.usageMetadata?.authProvenance).toMatch(/^[a-f0-9]{64}$/)
+    expect(second.usageMetadata?.authProvenance).not.toBe(first.usageMetadata?.authProvenance)
+    expect(JSON.stringify(first)).not.toContain('test-secret')
+    expect(JSON.stringify(second)).not.toContain('new-key')
   })
 
   it('rejects malformed successful responses', async () => {

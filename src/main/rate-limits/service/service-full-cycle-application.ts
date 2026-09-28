@@ -216,6 +216,12 @@ export abstract class RateLimitServiceFullCycleApplication extends RateLimitServ
       previousCursorAccount !== undefined &&
       cursorAccount !== undefined &&
       previousCursorAccount !== cursorAccount
+    const previousZcodeAccount = previousState.zcode?.usageMetadata?.authProvenance
+    const zcodeAccount = zcode.usageMetadata?.authProvenance
+    const sameZcodeAccount =
+      previousZcodeAccount !== undefined &&
+      zcodeAccount !== undefined &&
+      previousZcodeAccount === zcodeAccount
     this.trackActiveFailureStreak('grok', grok)
     this.trackActiveFailureStreak('cursor', cursor)
     this.trackActiveFailureStreak('zcode', zcode)
@@ -223,7 +229,10 @@ export abstract class RateLimitServiceFullCycleApplication extends RateLimitServ
       ...this.state,
       grok: this.applyStalePolicy(grok, previousState.grok),
       cursor: cursorAccountChanged ? cursor : this.applyStalePolicy(cursor, previousState.cursor),
-      zcode: this.applyStalePolicy(zcode, previousState.zcode)
+      zcode:
+        zcode.status === 'error' && !sameZcodeAccount
+          ? zcode
+          : this.applyStalePolicy(zcode, previousState.zcode)
     })
   }
 }

@@ -91,6 +91,44 @@ describe('RateLimitService', () => {
     expect(service.getState().codex?.session?.usedPercent).toBe(8)
   })
 
+  it('does not keep a previous ZCode account quota after a failed account switch', async () => {
+    vi.mocked(fetchZcodeRateLimits)
+      .mockResolvedValueOnce({
+        ...okProvider('zcode', 42),
+        usageMetadata: { source: 'web', authProvenance: 'account-a' }
+      })
+      .mockResolvedValueOnce({
+        ...errorProvider('zcode', 'request failed'),
+        usageMetadata: { source: 'web', authProvenance: 'account-b', failureKind: 'network' }
+      })
+    const service = new RateLimitService()
+
+    await service.refresh()
+    await service.refresh()
+
+    expect(service.getState().zcode?.status).toBe('error')
+    expect(service.getState().zcode?.session).toBeNull()
+  })
+
+  it('keeps a recent ZCode quota after a failed retry for the same account', async () => {
+    vi.mocked(fetchZcodeRateLimits)
+      .mockResolvedValueOnce({
+        ...okProvider('zcode', 42),
+        usageMetadata: { source: 'web', authProvenance: 'account-a' }
+      })
+      .mockResolvedValueOnce({
+        ...errorProvider('zcode', 'request failed'),
+        usageMetadata: { source: 'web', authProvenance: 'account-a', failureKind: 'network' }
+      })
+    const service = new RateLimitService()
+
+    await service.refresh()
+    await service.refresh()
+
+    expect(service.getState().zcode?.status).toBe('error')
+    expect(service.getState().zcode?.session?.usedPercent).toBe(42)
+  })
+
   it('does not reread Grok auth when callers read state snapshots', () => {
     vi.mocked(readGrokAuthSession).mockReturnValue({
       status: 'ok',

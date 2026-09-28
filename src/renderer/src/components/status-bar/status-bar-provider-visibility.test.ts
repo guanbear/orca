@@ -503,23 +503,21 @@ describe('isUsageEmptyState', () => {
   })
 
   it('shows the setup CTA for a loaded profile with no configured usage provider', () => {
-    expect(
-      isUsageEmptyState(
-        {
-          claude: provider('unavailable', { provider: 'claude' }),
-          codex: provider('unavailable', { provider: 'codex' }),
-          gemini: provider('unavailable'),
-          opencodeGo: provider('unavailable', { provider: 'opencode-go' }),
-          kimi: provider('unavailable', { provider: 'kimi' }),
-          antigravity: null,
-          minimax: provider('unavailable', { provider: 'minimax' }),
-          grok: provider('unavailable', { provider: 'grok' }),
-          cursor: provider('unavailable', { provider: 'cursor' }),
-          zcode: provider('unavailable', { provider: 'zcode' })
-        },
-        usageSettings()
-      )
-    ).toBe(true)
+    const settledProviders = {
+      claude: provider('unavailable', { provider: 'claude' }),
+      codex: provider('unavailable', { provider: 'codex' }),
+      gemini: provider('unavailable'),
+      opencodeGo: provider('unavailable', { provider: 'opencode-go' }),
+      kimi: provider('unavailable', { provider: 'kimi' }),
+      antigravity: null,
+      minimax: provider('unavailable', { provider: 'minimax' }),
+      grok: provider('unavailable', { provider: 'grok' }),
+      cursor: provider('unavailable', { provider: 'cursor' }),
+      zcode: provider('unavailable', { provider: 'zcode' })
+    }
+    expect(isUsageEmptyState(settledProviders, usageSettings())).toBe(true)
+    expect(isUsageEmptyState({ ...settledProviders, zcode: undefined }, usageSettings())).toBe(true)
+    expect(isUsageEmptyState({ ...settledProviders, zcode: null }, usageSettings())).toBe(false)
   })
 
   it('does not show the setup CTA while checked Antigravity usage is awaiting a snapshot', () => {
