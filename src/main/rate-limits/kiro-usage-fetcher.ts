@@ -115,7 +115,13 @@ export async function fetchKiroRateLimits(
     )
     return parseKiroUsageOutput(`${stdout}\n${stderr}`)
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException | null)?.code
+    const code =
+      error !== null &&
+      typeof error === 'object' &&
+      'code' in error &&
+      typeof error.code === 'string'
+        ? error.code
+        : null
     const unavailable = code === 'ENOENT'
     return result(
       unavailable ? 'unavailable' : 'error',
