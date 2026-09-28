@@ -7,6 +7,47 @@ import { splitOpenCodeSqliteCandidate } from './session-scanner-opencode-sqlite-
 import { writeOpenCodeSqliteDatabase } from './session-scanner-opencode-sqlite-fixture'
 import SyncDatabase from '../sqlite/sync-database'
 
+// Why readers and not casts: the worker dispatch returns `value: unknown` on purpose — it
+// crosses a process boundary. Narrowing here keeps the repo's no-assertions rule and fails
+// the test with a readable message if the payload shape ever changes.
+function readCandidates(value: unknown): { agent: string; path: string }[] {
+  if (typeof value !== 'object' || value === null || !('candidates' in value)) {
+    throw new Error('expected a listing payload with candidates')
+  }
+  const { candidates } = value
+  if (!Array.isArray(candidates)) {
+    throw new Error('expected candidates to be an array')
+  }
+  return candidates.map((candidate) => {
+    const agent = readStringField(candidate, 'agent')
+    const file = isRecord(candidate) ? candidate['file'] : null
+    return { agent, path: readStringField(file, 'path') }
+  })
+}
+
+function readMessageTexts(value: unknown): { text: string }[] {
+  if (typeof value !== 'object' || value === null || !('messages' in value)) {
+    throw new Error('expected a capture payload with messages')
+  }
+  const { messages } = value
+  if (!Array.isArray(messages)) {
+    throw new Error('expected messages to be an array')
+  }
+  return messages.map((message) => ({ text: readStringField(message, 'text') }))
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function readStringField(value: unknown, field: string): string {
+  const read = isRecord(value) ? value[field] : null
+  if (typeof read !== 'string') {
+    throw new Error(`expected a string \`${field}\``)
+  }
+  return read
+}
+
 const directories: string[] = []
 afterEach(() => {
   for (const directory of directories) {
@@ -43,15 +84,14 @@ describe('ZCode AI Vault SQLite worker', () => {
     if (!listed.ok) {
       return
     }
-    const candidates = (listed.value as { candidates: { agent: string; file: { path: string } }[] })
-      .candidates
+    const candidates = readCandidates(listed.value)
     expect(candidates).toHaveLength(1)
     expect(candidates[0]?.agent).toBe('zcode')
-    expect(splitOpenCodeSqliteCandidate(candidates[0]!.file.path, 'zcode')).toEqual({
+    expect(splitOpenCodeSqliteCandidate(candidates[0]!.path, 'zcode')).toEqual({
       dbPath,
       sessionId: 'zcode-session'
     })
-    expect(splitOpenCodeSqliteCandidate(candidates[0]!.file.path)).toBeNull()
+    expect(splitOpenCodeSqliteCandidate(candidates[0]!.path)).toBeNull()
 
     const parsed = await handleOpenCodeSqliteRequest({
       id: 2,
@@ -82,7 +122,7 @@ describe('ZCode AI Vault SQLite worker', () => {
     if (!captured.ok) {
       return
     }
-    expect((captured.value as { messages: { text: string }[] }).messages).toEqual(
+    expect(readMessageTexts(captured.value)).toEqual(
       expect.arrayContaining([expect.objectContaining({ text: 'Fix the import' })])
     )
   })
