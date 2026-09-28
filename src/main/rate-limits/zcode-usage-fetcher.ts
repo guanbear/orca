@@ -2,21 +2,12 @@ import { createHmac, randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { cancelUnreadResponseBody } from '../lib/unread-response-body'
 import type { ProviderRateLimits, RateLimitWindow } from '../../shared/rate-limit-types'
 
 const API_TIMEOUT_MS = 15_000
 const SUPPORTED_HOSTS = new Set(['api.z.ai', 'open.bigmodel.cn', 'dev.bigmodel.cn'])
 const CREDENTIAL_IDENTITY_KEY = randomBytes(32)
-
-type ZcodeProviderOptions = {
-  apiKey?: unknown
-  baseURL?: unknown
-}
-
-type ZcodeConfig = {
-  model?: string | { main?: unknown }
-  provider?: Record<string, { options?: ZcodeProviderOptions }>
-}
 
 type QuotaLimit = {
   type?: unknown
@@ -29,20 +20,29 @@ type QuotaLimit = {
   nextResetTime?: unknown
 }
 
-type QuotaResponse = {
-  success?: unknown
-  code?: unknown
-  msg?: unknown
-  data?: {
-    level?: unknown
-    limits?: unknown
-  }
-}
-
 type ZcodeUsageCredentials = {
   apiKey: string
   quotaUrl: string
   authProvenance: string
+}
+
+// Why readers and not casts: both JSON sources are outside our control — a user-edited
+// config file and a remote response — so their shape is a guess until something checks it.
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function readRecord(value: unknown): Record<string, unknown> | null {
+  return isRecord(value) ? value : null
+}
+
+function readMainProvider(model: unknown): string | null {
+  const name = typeof model === 'string' ? model : readRecord(model)?.main
+  if (typeof name !== 'string') {
+    return null
+  }
+  const delimiter = name.indexOf('/')
+  return delimiter > 0 && delimiter < name.length - 1 ? name.slice(0, delimiter) : null
 }
 
 function unavailable(error: string): ProviderRateLimits {
@@ -76,29 +76,24 @@ function failed(
 }
 
 function readCredentials(configPath: string): ZcodeUsageCredentials | null {
-  let config: ZcodeConfig
+  let config: Record<string, unknown> | null
   try {
-    config = JSON.parse(readFileSync(configPath, 'utf8')) as ZcodeConfig
+    config = readRecord(JSON.parse(readFileSync(configPath, 'utf8')))
   } catch {
     return null
   }
 
-  const mainModel = typeof config.model === 'string' ? config.model : config.model?.main
-  const delimiter = typeof mainModel === 'string' ? mainModel.indexOf('/') : -1
-  const mainProvider =
-    typeof mainModel === 'string' && delimiter > 0 && delimiter < mainModel.length - 1
-      ? mainModel.slice(0, delimiter)
-      : null
+  if (!config) {
+    return null
+  }
   // A quota from another configured account must never appear as the selected model's quota.
+  const mainProvider = readMainProvider(config.model)
   if (!mainProvider) {
     return null
   }
-  const provider = config.provider?.[mainProvider]
-  if (!provider) {
-    return null
-  }
-  const apiKey = provider.options?.apiKey
-  const baseURL = provider.options?.baseURL
+  const options = readRecord(readRecord(readRecord(config.provider)?.[mainProvider])?.options)
+  const apiKey = options?.apiKey
+  const baseURL = options?.baseURL
   if (
     typeof apiKey !== 'string' ||
     !apiKey.trim() ||
@@ -220,6 +215,7 @@ export async function fetchZcodeRateLimits(
   }
 
   if (!response.ok) {
+    await cancelUnreadResponseBody(response)
     return failed(
       `ZCode quota request failed (${response.status})`,
       'server',
@@ -227,24 +223,26 @@ export async function fetchZcodeRateLimits(
     )
   }
 
-  let payload: QuotaResponse
+  let payload: Record<string, unknown> | null
   try {
-    payload = (await response.json()) as QuotaResponse
+    payload = readRecord(await response.json())
   } catch {
     return failed('Could not parse ZCode quota response', 'parse', credentials.authProvenance)
   }
+  const data = readRecord(payload?.data)
+  const code = payload?.code
+  const reported = data?.limits
   if (
-    payload.success !== true ||
-    (payload.code !== undefined && payload.code !== 0 && payload.code !== 200) ||
-    !Array.isArray(payload.data?.limits)
+    payload?.success !== true ||
+    (code !== undefined && code !== 0 && code !== 200) ||
+    !Array.isArray(reported)
   ) {
-    const message = typeof payload.msg === 'string' ? payload.msg : 'Invalid ZCode quota response'
+    const msg = payload?.msg
+    const message = typeof msg === 'string' ? msg : 'Invalid ZCode quota response'
     return failed(message, 'parse', credentials.authProvenance)
   }
 
-  const limits = payload.data.limits.filter(
-    (value): value is QuotaLimit => typeof value === 'object' && value !== null
-  )
+  const limits = reported.filter((value): value is QuotaLimit => isRecord(value))
   const planLimits = limits
     .filter((limit) => limit.type === 'TOKENS_LIMIT' || limit.type === 'CREDIT_LIMIT')
     .map(asWindow)
@@ -266,7 +264,7 @@ export async function fetchZcodeRateLimits(
     session,
     weekly,
     monthly,
-    planType: typeof payload.data.level === 'string' ? payload.data.level : null,
+    planType: typeof data?.level === 'string' ? data.level : null,
     updatedAt: Date.now(),
     error: null,
     status: 'ok',
