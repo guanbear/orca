@@ -12,9 +12,9 @@ import * as conversationCommands from './structured-conversation-command-send'
 import type { AgentSessionMutationResult } from '../../../../shared/agent-session-wire'
 import {
   agentSessionRefusalFailure,
-  agentSessionRpcErrorFailure,
+  agentSessionThrownFailure,
   agentSessionWriteKindForMethod as writeKind
-} from '../../../../shared/agent-session-refusal-notice'
+} from '../../../../shared/agent-session-write-failure'
 import { agentSessionRefusalOperationState } from '../../../../shared/agent-session-refusal-retry'
 import { structuredAgentSessionPayloadFingerprint } from '../../../../shared/structured-agent-session-mutation'
 import type { RuntimeClientTarget } from '@/runtime/runtime-rpc-client'
@@ -98,7 +98,8 @@ export function useStructuredAgentSessionMutate(args: {
           ? {
               kind: 'not-done',
               notice: agentSessionWriteFailureText(
-                agentSessionRpcErrorFailure(
+                agentSessionThrownFailure(
+                  error,
                   error instanceof RuntimeRpcCallError ? error.code : undefined
                 ),
                 writeKind(fingerprintMethod, fields)

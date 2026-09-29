@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { providerDiagnosticOf } from '../../shared/agent-session-failure'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { spawnProcess, type SpawnedProcess } from '../../shared/child-process/run-process'
 import { hasLiveClaudePtys } from '../claude-accounts/live-pty-gate'
@@ -163,9 +164,12 @@ describe('Claude stream-json connection', () => {
     // An inherited value wins over the SDK's default, so clear it to pin the default.
     vi.stubEnv('CLAUDE_CODE_ENTRYPOINT', undefined)
     vi.stubEnv('ORCA_CONNECTION_MARKER', 'inherited')
+    // An Orca launched inside another structured session inherits that session's id.
+    vi.stubEnv('ORCA_AGENT_SESSION_ID', 'a0b1c2d3-0000-4000-8000-00000000abcd')
     const scenario = scriptScenario([HOLD_OPEN])
     const connection = await open(
       launchFor(scenario, {
+        ORCA_AGENT_SESSION_ID: 'f7a1c0de-1111-4222-8333-444455556666',
         CLAUDE_CONFIG_DIR: '/accounts/managed/home',
         ANTHROPIC_AUTH_TOKEN: 'configured-token',
         ORCA_AGENT_SESSION_SPAWN_TOKEN: 'spawn-9',
@@ -184,6 +188,8 @@ describe('Claude stream-json connection', () => {
     expect(env.ANTHROPIC_AUTH_TOKEN).toBe('configured-token')
     expect(env.ORCA_AGENT_SESSION_SPAWN_TOKEN).toBe('spawn-9')
     expect(env.ORCA_CONNECTION_MARKER).toBe('inherited')
+    // The session's own id reaches the spawned child over the inherited one.
+    expect(env.ORCA_AGENT_SESSION_ID).toBe('f7a1c0de-1111-4222-8333-444455556666')
     expect(env.ANTHROPIC_API_KEY).toBeUndefined()
     expect(env.CLAUDE_CODE_CHILD_SESSION).toBeUndefined()
     expect(env.CLAUDE_CODE_SESSION_ID).toBeUndefined()
@@ -592,6 +598,11 @@ describe('Claude stream-json connection', () => {
     await until(() => exit, 'the exit error')
     // The status and stderr are the only diagnostic a refused start leaves behind.
     expect((exit as unknown as Error).message).toMatch(/exited \(code 1\): claude: not signed in/)
+    // Kept apart from Orca's wording where it is composed, and marked as log text.
+    expect(providerDiagnosticOf(exit)).toEqual({
+      text: expect.stringMatching(/^\(code 1\)\n.*claude: not signed in/s),
+      audience: 'log'
+    })
     expect(connection.closed).toBe(true)
     // Stderr-triggered capture can win or lose the race with this real child's exit.
     const closed = await connection.close()

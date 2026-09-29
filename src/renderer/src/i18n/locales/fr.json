@@ -595,6 +595,7 @@
           "mimo_code_label": "MiMo Code",
           "muse_label": "Muse",
           "opencode2_label": "OpenCode 2",
+          "codebuddy_label": "CodeBuddy",
           "zcode_label": "ZCode"
         },
         "skill": {
@@ -3136,6 +3137,7 @@
           },
           "TerminalContextMenu": {
             "b4cdd9314e": "Effacer l'écran",
+            "resetTerminal": "Réinitialiser le terminal",
             "8c17d6786d": "Fermer le volet",
             "copyTerminalId": "Copier l'ID du terminal",
             "2cf85a6a55": "Copier l'ID du volet",
@@ -3769,7 +3771,8 @@
             "floatingTerminalNewActivity": "{{label}}, nouvelle activité",
             "codexSignInSuccess": "Connecté à Codex",
             "codexSignInError": "Échec de la connexion à Codex. Veuillez réessayer.",
-            "cursorUsageMenu": "Utilisation Cursor"
+            "cursorUsageMenu": "Utilisation Cursor",
+            "hiddenUsageProviders": "Aussi : {{value0}}"
           },
           "StatusBarUsageEmptyCta": {
             "828c764a79": "Connecter un compte",
@@ -17411,6 +17414,7 @@
   "components": {
     "native-chat": {
       "writeNotice": {
+        "notDoneReadHistory": "L'historique de ce chat n'a pas pu être chargé.",
         "notDoneSend": "Votre message n'a pas été envoyé.",
         "tryAgainComposerSend": "Renvoyez-le.",
         "notDoneStop": "L'agent n'a pas été arrêté.",
@@ -17425,8 +17429,39 @@
         "outcomeUnknown": "Orca n'a pas pu confirmer ce qui s'est passé. Vérifiez le chat.",
         "questionChanged": "Cette question a déjà reçu une réponse ou a changé.",
         "historyUnreadable": "Orca n'a pas pu lire l'historique enregistré de ce chat.",
+        "historyUnusable": "Impossible de charger ce chat.",
+        "historyUnavailable": "Orca n'a pas pu ouvrir l'historique de ce chat pour le moment.",
         "unsupported": "L'instance d'Orca qui exécute ce chat ne le prend pas en charge. Mettez Orca à jour, puis réessayez.",
-        "unreachable": "Orca n'a pas pu joindre l'agent."
+        "unreachable": "Orca n'a pas pu joindre l'agent.",
+        "recordFailed": "Orca n'a pas pu l'enregistrer dans l'historique de ce chat.",
+        "conversationCleared": "Cette conversation a été effacée.",
+        "openCurrentConversation": "Ouvrez la conversation actuelle pour continuer.",
+        "clearUnfinished": "Le dernier /clear ne s'est pas terminé.",
+        "commandRunning": "Un /compact ou /clear est encore en cours.",
+        "waitForCommand": "Attendez la fin du /compact ou /clear.",
+        "agentStarting": "L'agent est encore en cours de démarrage.",
+        "waitForStart": "Attendez que l'agent ait fini de démarrer.",
+        "turnActive": "L'agent est encore en train de répondre.",
+        "waitForTurn": "Attendez que l'agent ait fini de répondre, ou arrêtez-le.",
+        "promptPending": "L'agent attend une réponse à une question ou à une demande d'approbation.",
+        "answerFirst": "Répondez d'abord à la question ou à la demande d'approbation.",
+        "backgroundTasksRunning": "Des tâches en arrière-plan sont encore en cours.",
+        "waitForBackgroundTasks": "Attendez la fin des tâches en arrière-plan.",
+        "messagesUnsettled": "Un message que vous avez envoyé plus tôt n'a pas encore été confirmé.",
+        "settleEarlierMessage": "Attendez que votre message précédent soit transmis, ou renvoyez-le.",
+        "optionRejected": "L'agent n'a pas accepté ce réglage.",
+        "goalsUnsupported": "Cet agent ne prend pas en charge les objectifs.",
+        "agentRefused": "L'agent l'a refusé.",
+        "ownerUnproven": "Orca n'a pas confirmé l'arrêt de l'agent précédent de ce chat.",
+        "reopenChat": "Rouvrez le chat pour vérifier à nouveau.",
+        "terminalAgentHoldsChat": "Ce chat est encore ouvert dans un agent de terminal.",
+        "quitTerminalAgent": "Quittez cet agent pour continuer le chat ici.",
+        "hostReconciling": "Orca vérifie encore ce chat après son redémarrage.",
+        "waitMoment": "Patientez un instant.",
+        "recordUnreadable": "Orca n'a pas pu lire l'état enregistré de ce chat.",
+        "chatNotFound": "L'instance d'Orca qui exécute ce chat n'en a aucune trace.",
+        "startNewChat": "Démarrez un nouveau chat pour continuer.",
+        "tryAgain": "Réessayez."
       },
       "composer": {
         "imageUnsupported": "Le collage d'image n'est pas pris en charge pour cet agent.",
@@ -17587,6 +17622,7 @@
           "subtitle": "La transcription n'a pas pu être lue. Rebasculez sur le terminal pour continuer à travailler.",
           "retryingSubtitle": "La transcription n'a pas pu être lue. Orca continue d'essayer de la charger."
         },
+        "reconnecting": "Reconnexion à ce chat…",
         "pairHost": "Associez un hôte pour consulter l'historique de chat des agents.",
         "notAgent": {
           "title": "Aucune conversation ici",
@@ -17734,7 +17770,9 @@
         "startedN": "Lancement des sous-agents {{value0}}",
         "ranOne": "A exécuté 1 sous-agent",
         "ranN": "Ran les sous-agents {{value0}}",
-        "tokens": "Jetons {{value0}}"
+        "tokens": "Jetons {{value0}}",
+        "unnamed": "Sous-agent",
+        "writtenBy": "Écrit par le sous-agent {{value0}}"
       },
       "conversationCommand": {
         "pendingWork": "Attendez la fin du travail et des messages en attente avant d'utiliser cette commande.",

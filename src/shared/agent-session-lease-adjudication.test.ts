@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   adjudicateAgentSessionRestart,
   agentSessionLeaseAdmitsWriter,
-  classifyObservedAgentSessionSpawnToken,
   evaluateAgentSessionAcquisition,
   isProvenAliveProbe,
   isProvenDeadProbe,
@@ -91,7 +90,11 @@ describe('acquisition compare-and-swap', () => {
         handoffOperationId: null,
         probe: MATCHED
       })
-    ).toEqual({ decision: 'refused', code: 'agent_session_checkpoint_stale' })
+    ).toEqual({
+      decision: 'refused',
+      code: 'agent_session_checkpoint_stale',
+      details: { reason: 'fenceStale' }
+    })
     expect(acquire(held, MATCHED)).toEqual({ decision: 'granted', nextFence: 8 })
   })
 
@@ -108,7 +111,11 @@ describe('acquisition compare-and-swap', () => {
         handoffOperationId: null,
         probe: MATCHED
       })
-    ).toEqual({ decision: 'refused', code: 'agent_session_checkpoint_stale' })
+    ).toEqual({
+      decision: 'refused',
+      code: 'agent_session_checkpoint_stale',
+      details: { reason: 'fenceStale' }
+    })
   })
 
   it('never grants a second owner on expiry alone', () => {
@@ -116,11 +123,13 @@ describe('acquisition compare-and-swap', () => {
     const expired = lease({ leaseDeadlineAt: 1, lastRenewedAt: 1 })
     expect(acquire(expired, INDETERMINATE)).toEqual({
       decision: 'refused',
-      code: 'agent_session_ownership_unknown'
+      code: 'agent_session_ownership_unknown',
+      details: { reason: 'ownerUnproven' }
     })
     expect(acquire(expired, MATCHED)).toEqual({
       decision: 'refused',
-      code: 'agent_session_conflict'
+      code: 'agent_session_conflict',
+      details: { reason: 'ownerAlive' }
     })
     expect(acquire(expired, { outcome: 'pid-absent' })).toEqual({
       decision: 'granted',
@@ -131,7 +140,8 @@ describe('acquisition compare-and-swap', () => {
   it('refuses while unreconciled even with proof the owner is dead', () => {
     expect(acquire(lease({ unreconciled: true }), { outcome: 'pid-absent' })).toEqual({
       decision: 'refused',
-      code: 'execution_owner_reconciling'
+      code: 'execution_owner_reconciling',
+      details: { reason: 'hostReconciling' }
     })
   })
 
@@ -139,14 +149,16 @@ describe('acquisition compare-and-swap', () => {
     // Restart adjudication and recovery resolution are what retire it, once its owner is gone.
     expect(acquire(lease({ claimStatus: 'conflicted' }), { outcome: 'exit-observed' })).toEqual({
       decision: 'refused',
-      code: 'agent_session_conflict'
+      code: 'agent_session_conflict',
+      details: { reason: 'claimConflicted' }
     })
   })
 
   it('refuses acquisition in the recovering stage', () => {
     expect(acquire(lease({ handoffStage: 'recovering' }), { outcome: 'pid-absent' })).toEqual({
       decision: 'refused',
-      code: 'agent_session_ownership_unknown'
+      code: 'agent_session_ownership_unknown',
+      details: { reason: 'ownerUnproven' }
     })
   })
 
@@ -159,7 +171,8 @@ describe('acquisition compare-and-swap', () => {
     })
     expect(acquire(mid, { outcome: 'reservation-unused' }, 'op-2')).toEqual({
       decision: 'refused',
-      code: 'agent_session_operation_conflict'
+      code: 'agent_session_operation_conflict',
+      details: { reason: 'handoffInFlight' }
     })
     expect(acquire(mid, { outcome: 'reservation-unused' }, 'op-1')).toEqual({
       decision: 'retry-reservation',
@@ -171,7 +184,8 @@ describe('acquisition compare-and-swap', () => {
     const reserved = lease({ ownerProcess: null, claimStatus: 'reserved', handoffStage: null })
     expect(acquire(reserved, INDETERMINATE)).toEqual({
       decision: 'refused',
-      code: 'agent_session_ownership_unknown'
+      code: 'agent_session_ownership_unknown',
+      details: { reason: 'ownerUnproven' }
     })
     expect(acquire(reserved, { outcome: 'reservation-unused' })).toEqual({
       decision: 'granted',
@@ -300,26 +314,12 @@ describe('restart reconciliation', () => {
   )
 })
 
-describe('writer admission and orphan spawn tokens', () => {
+describe('writer admission', () => {
   it('admits a writer only when reconciled, settled, live, and holding a process', () => {
     expect(agentSessionLeaseAdmitsWriter(lease())).toBe(true)
     expect(agentSessionLeaseAdmitsWriter(lease({ unreconciled: true }))).toBe(false)
     expect(agentSessionLeaseAdmitsWriter(lease({ handoffStage: 'new-owner-proving' }))).toBe(false)
     expect(agentSessionLeaseAdmitsWriter(lease({ claimStatus: 'reserved' }))).toBe(false)
     expect(agentSessionLeaseAdmitsWriter(lease({ ownerProcess: null }))).toBe(false)
-  })
-
-  it('calls a spawn token with no matching lease an orphan', () => {
-    const leases = [lease(), lease({ sessionId: 'session-beta-1', reservedSpawnToken: 'spawn-b' })]
-    expect(classifyObservedAgentSessionSpawnToken({ spawnToken: 'spawn-a', leases })).toBe('owned')
-    expect(classifyObservedAgentSessionSpawnToken({ spawnToken: 'spawn-b', leases })).toBe('owned')
-    expect(classifyObservedAgentSessionSpawnToken({ spawnToken: 'spawn-z', leases })).toBe('orphan')
-  })
-
-  it('still recognises an owner whose reservation token was cleared after proving', () => {
-    const proved = lease({ reservedSpawnToken: null })
-    expect(
-      classifyObservedAgentSessionSpawnToken({ spawnToken: 'spawn-a', leases: [proved] })
-    ).toBe('owned')
   })
 })

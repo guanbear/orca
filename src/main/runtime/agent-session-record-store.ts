@@ -1,3 +1,4 @@
+import { agentSessionRefusalError } from '../../shared/agent-session-wire-refusals'
 import { commitConversationCommandRecord } from './agent-session-conversation-command-record'
 import { setAgentSessionRecordConversationName } from './agent-session-record-conversation-name'
 /** Durable single-writer session records and their operation ledger. */
@@ -24,7 +25,6 @@ import {
   retireAgentSessionClaimKey
 } from './agent-session-claim-key-retention'
 import type { AgentSessionOwnerProbe } from '../../shared/agent-session-lease-adjudication'
-import { classifyObservedAgentSessionSpawnToken } from '../../shared/agent-session-lease-adjudication'
 import type { AgentSessionProviderHandleLink } from '../../shared/agent-session-provider-handle'
 import {
   agentSessionScopeKey,
@@ -179,14 +179,6 @@ export class AgentSessionRecordStore {
   isClaimKeyVerifiable = (keyId: string, now: number): boolean =>
     isAgentSessionClaimKeyVerifiable(this.state, keyId, now)
 
-  /** Spawn tokens observed on the host with no matching lease. Stop them; never adopt them. */
-  listOrphanSpawnTokens(observedTokens: readonly string[]): string[] {
-    const leases = this.listRecords().map((record) => record.lease)
-    return observedTokens.filter(
-      (spawnToken) => classifyObservedAgentSessionSpawnToken({ spawnToken, leases }) === 'orphan'
-    )
-  }
-
   async reserveOwner(request: AgentSessionReserveRequest): Promise<AgentSessionReserveResult> {
     return this.transact(() =>
       commitAgentSessionReservation(this.state, request, AGENT_SESSION_LEASE_TTL_MS)
@@ -326,11 +318,9 @@ export class AgentSessionRecordStore {
     return this.transact(() => {
       const record = this.state.records.get(sessionId)
       if (!record) {
-        throw new Error(
-          this.isSessionUnreadable(sessionId)
-            ? 'execution_owner_reconciling'
-            : 'agent_session_identity_required'
-        )
+        throw this.isSessionUnreadable(sessionId)
+          ? agentSessionRefusalError('execution_owner_reconciling', { reason: 'recordUnreadable' })
+          : agentSessionRefusalError('agent_session_identity_required', { reason: 'recordMissing' })
       }
       const next = apply(record)
       this.state.records.set(sessionId, next)
