@@ -315,7 +315,7 @@ describe('native chat session option enrichment', () => {
     })
     const discover = vi.fn(() =>
       discoverNativeChatCatalogModels('kiro', {
-        settings: {},
+        target: { kind: 'local' as const },
         worktreeId: 'repo::/worktree',
         worktreePath: '/worktree'
       })
