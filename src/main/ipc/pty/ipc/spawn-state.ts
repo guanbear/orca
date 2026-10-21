@@ -1,3 +1,5 @@
+import type { PtyRegistrationClaim } from '../../../runtime/runtime-terminal-state-records'
+import type { PaneSpawnOperation } from '../pane/pane-spawn-operation'
 import type {
   IPtyProvider,
   PtySpawnOptions,
@@ -12,7 +14,7 @@ import { createPtySpawnTiming } from '../../pty-spawn-timing'
 import { noCodexResumeLaunch, type CodexResumeLaunch } from '../host-env/codex-resume'
 import type { StablePaneOwner } from '../pane/stable-owner'
 import type { PaneSpawnReservation } from '../pane/spawn-reservation'
-import type { ReplacedPaneOwner } from '../pane/pane-owner-replacement'
+import type { ReplacedPaneOwner } from '../pane/replaced-pane-owner'
 import { localProvider } from '../provider/registry'
 import type { AdoptStablePaneResult, PtySpawnIpcArgs, PtySpawnIpcDeps } from './spawn-types'
 import type { PaneAgentLaunch } from './spawn-agent-launch-end'
@@ -34,10 +36,12 @@ export type PtyIpcSpawnState = {
   replacedPaneOwner: ReplacedPaneOwner | null
   finishTerminalInstall: () => void
   result: PtySpawnResult
+  paneSpawnOperation?: PaneSpawnOperation
   stablePaneOwner: StablePaneOwner | null
   stablePaneBindingPersisted: boolean
   rejectedRegistrationCandidate: PtySpawnResult | null
   pendingRegistrationPtyId: string | null
+  pendingRegistrationClaim?: PtyRegistrationClaim
   reconciledSnapshotSeq: number | null
   snapshotKittyFlagsCoverReconciledSeq: boolean
   preparedProvisionalExecutionContext: boolean

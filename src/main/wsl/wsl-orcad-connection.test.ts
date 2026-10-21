@@ -2,9 +2,9 @@ import { connect, type Server, type Socket } from 'node:net'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { encodePairingOffer, parsePairingCode, PAIRING_OFFER_VERSION } from '../../shared/pairing'
 import type { ServeReadiness } from '../server/serve-readiness'
-import { OrcadManagedIdentityError } from '../ssh/orcad-managed-tunnel-identity'
+import { OrcadManagedIdentityError } from '../managed-server/lifecycle/orcad-managed-tunnel-identity'
 import { checkOrcadStdioBridge, openOrcadStdioBridgeChannel } from '../ssh/orcad-stdio-bridge'
-import { startEchoServer } from '../ssh/orcad-stdio-bridge-test-channel'
+import { startEchoServer } from '../managed-server/lifecycle/orcad-stdio-bridge-test-channel'
 import { fakeWslBridgeChildren, posixOrcadStdioBridge } from './wsl-orcad-bridge-test-child'
 import {
   WslOrcadConnectionManager,
@@ -180,14 +180,14 @@ describe('WslOrcadConnectionManager', () => {
     expect(onChange).toHaveBeenCalledTimes(2)
   })
 
-  it('reports a changed pairing offer without rebuilding the bridge', async () => {
+  it('keeps its client grant when a relaunch advertises a new pairing offer', async () => {
     const { manager, launches, onChange } = setup()
     const connection = await manager.ensure('Ubuntu')
     launches.push(ready(first.port, 'rotated-token'))
     const refreshed = await manager.ensure('Ubuntu')
     expect(refreshed.localPort).toBe(connection.localPort)
-    expect(parsePairingCode(refreshed.pairingOffer)?.deviceToken).toBe('rotated-token')
-    expect(onChange).toHaveBeenLastCalledWith('Ubuntu', refreshed, { state: 'ready', census: null })
+    expect(refreshed.pairingOffer).toBe(connection.pairingOffer)
+    expect(onChange).toHaveBeenCalledTimes(2)
   })
 
   it('moves the bridge to the new port after a relaunch, on the same local port', async () => {

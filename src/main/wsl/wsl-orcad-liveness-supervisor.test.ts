@@ -5,7 +5,7 @@ import type { WslRunningDistrosRead } from '../wsl-background-distro-gate'
 import type { WslGuestIdentity } from './wsl-guest-process-identity'
 import type { WslOrcadConnection } from './wsl-orcad-connection'
 import type { WslOrcadConnectionStatus } from './wsl-orcad-connection-status'
-import { WSL_ORCAD_HEARTBEAT_MS } from './wsl-orcad-liveness-model'
+import { WSL_ORCAD_HEARTBEAT_MS } from './wsl-orcad-liveness-state'
 import { WslOrcadLivenessSupervisor } from './wsl-orcad-liveness-supervisor'
 import { WSL_ORCAD_RECONNECT_DELAYS_MS } from './wsl-orcad-reconnect-backoff'
 import type { WslOrcadWatch } from './wsl-orcad-watch'
@@ -392,7 +392,7 @@ describe('WslOrcadLivenessSupervisor', () => {
     h.deferred[0]()
     await h.advance(5_000)
     expect(h.ensure).toHaveBeenCalledTimes(2)
-    expect(h.statuses.map((status) => status.state)).toEqual(['distro-stopped'])
+    expect(h.statuses.map((status) => status.state)).toEqual(['distro-stopped', 'ready'])
   })
 
   it('reports a stop once when both the holder and the watch exit', async () => {

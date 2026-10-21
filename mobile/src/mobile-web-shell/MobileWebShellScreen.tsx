@@ -33,11 +33,14 @@ import { useMobileWebShellSession } from './use-mobile-web-shell-session'
 import { usePageHostSnapshot } from './use-page-host-snapshot'
 import { useReportedHostAreaServing } from './host-area-serving'
 import { isHostRouteOf } from './page-route-policy'
+import { PageRouteUnavailableScreen } from './PageRouteUnavailableScreen'
 import { useResponsiveLayout } from '../layout/responsive-layout'
 import { storageReadParamsSchema, type BridgeNativeVerb } from './bridge/bridge-native-verbs'
 import { SHELL_OPENING_LABEL, ShellPageCover, ShellWaitingFrame } from './ShellWaitingFrame'
 import { ShellDownloadProgress } from './ShellDownloadProgress'
 import { pageSafeAreaInsets, usePublishedSafeAreaInsets } from './page-safe-area-insets'
+import { hostProfileUnreadableLine, pageFaultLine } from './shell-lifecycle-log'
+import { recordShellLifecycleLine } from './shell-lifecycle-line-recorder'
 
 function failureMessage(reason: MobileWebShellFailureCause): string {
   switch (reason) {
@@ -132,12 +135,8 @@ export type MobileWebShellScreenProps = {
   hostId: string
   /** The screen this shell stands in for, which the page cannot derive from a document served at `/`. */
   route: BridgeInitRoute
-  /**
-   * What to render when the bundle does not list this route, or lists it needing a grant this app
-   * does not implement. Required, because every caller has a native screen behind it: that is what
-   * the negotiation falls back to, and a shell with nothing behind it would paint a blank instead.
-   */
-  fallback: ReactNode
+  /** False for the catch-all, whose pathnames have no screen in this app. */
+  appNamesRoute?: boolean
   /**
    * The page applied a one-shot route param and asks for it to be erased (ruling 34), naming what
    * it applied. Only a caller that put one on the route ever hears this, and the comparison is
@@ -157,7 +156,7 @@ export type MobileWebShellScreenProps = {
 export function MobileWebShellScreen({
   hostId,
   route,
-  fallback,
+  appNamesRoute,
   onRouteParamClear,
   runtime
 }: MobileWebShellScreenProps) {
@@ -188,6 +187,7 @@ export function MobileWebShellScreen({
     hostId,
     routePathname: route.pathname,
     wide: isWideLayout,
+    appNamesRoute,
     runtime
   })
   // Full screen from the download on, as on a phone; while checking, nobody knows the page owns it.
@@ -245,6 +245,7 @@ export function MobileWebShellScreen({
     // handler on the other, and neither has anywhere to put a throw.
     onPageFault: (error) => {
       console.warn('[web-shell] the page faulted', error)
+      recordShellLifecycleLine(hostId, pageFaultLine(error))
       reportShellFailure('document-load-failed')
     },
     // The `init` this ready is answered with is already built from the app's writes, which reach
@@ -266,6 +267,7 @@ export function MobileWebShellScreen({
     // `document-load-failed` because that is what happens: the document loads and the page refuses
     // the session, so no tree is ever built. The refetch it costs is wasted on a route this shell
     // produced, and the second report is terminal, which is the failure screen this deserves.
+    // Logged by the host's `route-refused` diagnostic, which carries the issue, in the same call.
     onRouteRefused: (issue) => {
       console.warn('[web-shell] refused to open this screen', issue)
       reportShellFailure('document-load-failed')
@@ -304,7 +306,7 @@ export function MobileWebShellScreen({
     onBinaryFramesDropped: reportDroppedBinaryFrames
   })
 
-  // A route that moved under a screen that stayed mounted: the session switch keeps `paneKey` out
+  // A route that moved under a screen that stayed mounted: the session route keeps `paneKey` out
   // of its key so a notification tap for another pane is a tab switch rather than a page reload,
   // and this is how the page hears about it. Nothing is tracked here — which route the page has,
   // and which one is still owed it, belong to the host, which outlives any one run of this effect.
@@ -341,9 +343,15 @@ export function MobileWebShellScreen({
       reportShellFailure('document-load-failed')
     }
   }, [reportShellFailure, unreadable])
+  // Log-only and separate, so the failure effect above keeps its own dependencies.
+  useEffect(() => {
+    if (unreadable) {
+      recordShellLifecycleLine(hostId, hostProfileUnreadableLine())
+    }
+  }, [hostId, unreadable])
 
-  if (state.kind === 'native-route') {
-    return fallback
+  if (state.kind === 'route-unavailable') {
+    return <PageRouteUnavailableScreen hostId={hostId} />
   }
   if (state.kind === 'wall') {
     return <ProtocolBlockScreen verdict={state.verdict} />

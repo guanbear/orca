@@ -1,4 +1,5 @@
 import type { ProviderLoadActionsModel } from './use-mobile-tasks-provider-load-actions'
+import { fetchJiraTaskIssues } from './mobile-jira-task-source'
 import { isHostedTaskRepo, useCallback, useEffect, useRef } from './mobile-tasks-dependencies'
 import {
   GITHUB_REPO_CONCURRENCY,
@@ -10,6 +11,7 @@ import {
   sortLinearIssues,
   createGitLabTask,
   createGitLabTodoTask,
+  createJiraTask,
   createLinearTask,
   mapWithConcurrency,
   taskTime
@@ -27,12 +29,14 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
     client,
     clientRef,
     connState,
-    countGitHubItems,
+    countGitHubItemPages,
     fetchGitHubItemsPage,
     githubMode,
     gitlabFilter,
     gitlabView,
     linearConnected,
+    jiraConnection,
+    jiraFilter,
     linearFilter,
     linearOrderBy,
     loadGenerationRef,
@@ -49,7 +53,7 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
     setGithubRepoSources,
     setGithubSourceErrors,
     setGithubSourceFallbacks,
-    setGithubTotalCount,
+    setGithubCountedTotalPages,
     setItems,
     setLoading,
     setRefreshing,
@@ -80,10 +84,24 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
           setItems([])
           return
         }
-        // Why: Linear issues do not need the repo list, only the composer does, so
-        // start the fetch either way but never make Linear wait on it.
+        // Jira and Linear need repositories for workspace creation, not issue reads.
         const repoListRequest = repoListEnsureLoaded()
         void repoListRequest.catch(() => {})
+        if (provider === 'jira') {
+          if (!jiraConnection.connected) {
+            setItems([])
+            return
+          }
+          const issues = await fetchJiraTaskIssues(requestClient, {
+            jql: appliedQuery,
+            filter: jiraFilter,
+            siteId: jiraConnection.selection
+          })
+          if (isCurrent()) {
+            setItems(issues.map(createJiraTask))
+          }
+          return
+        }
         const currentRepos = provider === 'linear' ? [] : await repoListRequest
         if (!isCurrent()) {
           return
@@ -123,15 +141,15 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
             setGithubCurrentPage(0)
             setItems(page.items)
             if (effectiveRepoIds.size > 0) {
-              void countGitHubItems(requestClient, queriedRepos).then((count) => {
+              void countGitHubItemPages(requestClient, queriedRepos).then((totalPages) => {
                 if (isCurrent()) {
-                  setGithubTotalCount(count)
+                  setGithubCountedTotalPages(totalPages)
                 }
               })
             } else {
               // Why: the default all-repos view must not spend GitHub Search
               // quota on totals before the user narrows the repository scope.
-              setGithubTotalCount(null)
+              setGithubCountedTotalPages(null)
             }
             if (page.failedCount > 0) {
               setError(buildPartialRepositoryNotice(page.failedCount, queriedRepos.length))
@@ -254,11 +272,13 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
       appliedQuery,
       client,
       connState,
-      countGitHubItems,
+      countGitHubItemPages,
       fetchGitHubItemsPage,
       gitlabFilter,
       gitlabView,
       githubMode,
+      jiraConnection,
+      jiraFilter,
       linearConnected,
       linearFilter,
       linearOrderBy,
@@ -274,7 +294,7 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
     ]
   )
   // Server repos changing reload an unfiltered repo list quietly; when loadTasks changed too (the
-  // filter widened), its own effect already loads, and Linear doesn't read repos.
+  // filter widened), its own effect already loads; Jira and Linear read issues independently.
   const listedServerReposRef = useRef({ serverRepoList, loadTasks })
   useEffect(() => {
     const prev = listedServerReposRef.current
@@ -283,7 +303,7 @@ export function useMobileTasksTaskListLoading(model: ProviderLoadActionsModel) {
       prev.serverRepoList !== serverRepoList &&
       prev.loadTasks === loadTasks &&
       effectiveRepoIds.size === 0 &&
-      provider !== 'linear' &&
+      (provider === 'github' || provider === 'gitlab') &&
       connState === 'connected' &&
       taskStateHydrated
     ) {

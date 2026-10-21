@@ -9,15 +9,19 @@ import { ORCAD_MANAGED_REMOTE_PORT } from '../../shared/orcad-managed-runtime'
 import type { OrcadTerminalCensus } from '../../shared/orcad-terminal-census'
 import type { ServeReadiness } from '../server/serve-readiness'
 import { probeActiveOrcadReadiness } from '../ssh/orcad-active-readiness'
-import { orcadBoundPort } from '../ssh/orcad-managed-bound-port'
-import { managedOrcadInstallDir } from '../ssh/orcad-managed-runtime-context'
-import { wakeStoppedManagedOrcad } from '../ssh/orcad-managed-wake'
-import type { OrcadRemoteContext } from '../ssh/orcad-remote-context'
+import { orcadBoundPort } from '../managed-server/lifecycle/orcad-managed-bound-port'
+import { managedOrcadInstallDir } from '../managed-server/lifecycle/orcad-managed-runtime-context'
+import { wakeStoppedManagedOrcad } from '../managed-server/lifecycle/orcad-managed-wake'
+import type { OrcadRemoteContext } from '../managed-server/install/orcad-remote-context'
 import type { OrcadSlotOptions } from '../ssh/orcad-recovery-slot'
-import { readRemoteOrcadBuildHash } from '../ssh/orcad-remote-build-hash'
-import { requestOrcadTerminalCensus } from '../ssh/orcad-terminal-census-client'
+import { readRemoteOrcadBuildHash } from '../managed-server/install/orcad-remote-build-hash'
+import {
+  requestOrcadTerminalCensus,
+  type OrcadTerminalCensusRequestOptions
+} from '../ssh/orcad-terminal-census-client'
+import { updateTerminalCounts } from '../ssh/orcad-update-terminal-counts'
 import { tunneledOrcadPairingCode } from '../ssh/orcad-tunneled-pairing'
-import type { StartedPortForward } from '../ssh/ssh-port-forward-provider'
+import type { StartedPortForward } from '../ssh/port-forwarding/ssh-port-forward-provider'
 import type { OrcadHostTransport } from '../ssh/orcad-host-transport'
 import type { WslOrcadHostTarget } from './wsl-orcad-host-target'
 import { listenWslOrcadStdioBridge } from './wsl-orcad-stdio-bridge'
@@ -26,14 +30,26 @@ export type WslOrcadIncumbent = {
   census: OrcadTerminalCensus
   /** The incumbent's proven readiness; null when it could not be started or proven. */
   readiness: ServeReadiness | null
-  /** Counts again (no wake) just before activation stops the incumbent; null without readiness. */
-  recount: (() => Promise<OrcadTerminalCensus>) | null
+  /**
+   * Counts again (no wake) just before activation stops the incumbent, closing its terminal
+   * admission first so none starts before the stop; never zero unread.
+   */
+  recount: () => Promise<OrcadTerminalCensus>
+  /** Reopens the admission `recount` closed, when the incumbent keeps running. */
+  releaseAdmission: () => Promise<void>
 }
 
 const UNVERIFIABLE: OrcadTerminalCensus = {
   liveSessions: null,
   startedSinceActivation: null,
   daemonProtocolVersion: null
+}
+
+const UNREADABLE: WslOrcadIncumbent = {
+  census: UNVERIFIABLE,
+  readiness: null,
+  recount: async () => UNVERIFIABLE,
+  releaseAdmission: async () => {}
 }
 
 export type WslOrcadIncumbentDependencies = {
@@ -76,7 +92,7 @@ export async function readWslOrcadIncumbent(
   const record = args.context.activationRecord
   const activatedAt = record.activatedAt ? Date.parse(record.activatedAt) : Number.NaN
   if (!record.active || !Number.isFinite(activatedAt) || activatedAt < 0) {
-    return { census: UNVERIFIABLE, readiness: null, recount: null }
+    return UNREADABLE
   }
   let readiness: ServeReadiness
   try {
@@ -93,21 +109,28 @@ export async function readWslOrcadIncumbent(
         }
       )
     } else {
-      return { census: UNVERIFIABLE, readiness: null, recount: null }
+      return UNREADABLE
     }
   } catch {
-    return { census: UNVERIFIABLE, readiness: null, recount: null }
+    return UNREADABLE
   }
-  const recount = (): Promise<OrcadTerminalCensus> =>
-    countIncumbentTerminals(args, readiness, activatedAt, dependencies)
-  return { census: await recount(), readiness, recount }
+  const counts = updateTerminalCounts((options) =>
+    countIncumbentTerminals(args, readiness, activatedAt, dependencies, options)
+  )
+  return {
+    census: await counts.countFirst(),
+    readiness,
+    recount: counts.recountCensus,
+    releaseAdmission: counts.releaseIncumbentAdmission
+  }
 }
 
 async function countIncumbentTerminals(
   args: { context: OrcadRemoteContext<WslOrcadHostTarget>; slot: OrcadSlotOptions },
   readiness: ServeReadiness,
   activatedAt: number,
-  dependencies: WslOrcadIncumbentDependencies
+  dependencies: WslOrcadIncumbentDependencies,
+  options: OrcadTerminalCensusRequestOptions
 ): Promise<OrcadTerminalCensus> {
   let forward: StartedPortForward | null = null
   try {
@@ -120,12 +143,11 @@ async function countIncumbentTerminals(
     if (!offer) {
       return UNVERIFIABLE
     }
-    // Why release: finished automation shells would otherwise defer every update, as on SSH.
     return await dependencies.census(
       pairedRuntimeConnectionFromOffer(offer),
       activatedAt,
       undefined,
-      { releaseFinishedAutomationTerminals: true }
+      options
     )
   } catch {
     return UNVERIFIABLE

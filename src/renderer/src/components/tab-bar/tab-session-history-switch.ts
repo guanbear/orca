@@ -1,5 +1,4 @@
-// Resolves a tab to its Agent Session History row, so the tab menu offers the same "Resume in New
-// Native Chat" / "Resume in New CLI" move the row menu does, under the row menu's gating.
+// Resolves a tab to its Agent Session History row so both menus offer the same surface switches.
 
 import type { AppState } from '@/store/types'
 import { getIndexedAllWorktrees } from '@/store/worktree-repo-index'
@@ -20,7 +19,9 @@ import {
 } from '../../../../shared/execution-host'
 import {
   adoptsCliConversations,
-  type CliConversationAdoptingAgent
+  CLI_CONVERSATION_ADOPTING_AGENTS,
+  cliConversationRowsShareAgent,
+  type CliConversationRowAgent
 } from '../../../../shared/structured-agent-cli-conversation-adoption'
 import { agentForksConversations } from '../../../../shared/agent-resume-argv'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
@@ -53,7 +54,7 @@ export type TabSessionHistorySubject = {
   | { kind: 'chat'; sessionId: string }
   | {
       kind: 'cli'
-      agent: CliConversationAdoptingAgent
+      agent: CliConversationRowAgent
       providerSessionId: string
     }
 )
@@ -76,8 +77,7 @@ function canHostOfferTabSessionMove(
   return kind === 'chat' && parseExecutionHostId(hostScope)?.kind === 'runtime'
 }
 
-/** Whether a pane's running agent has a conversation the move could act on, without building the
- *  list request, for a surface that stays rendered. The history lookup still decides on click. */
+/** The pane's known identity and launch route, without a History request. */
 export function canPaneOfferResumeInNewChat(
   state: AppState,
   pane: { worktreeId: string; paneKey: string }
@@ -93,14 +93,16 @@ export function canPaneOfferResumeInNewChat(
   // The row gate's launch-route half, so a project the chat route refuses (WSL, repair) hides it.
   return (
     canHostOfferTabSessionMove('cli', hostScope) &&
-    structuredAgentSessionLaunchFeasible(state, {
-      agent: conversation.agent,
-      workspace: {
-        kind: workspaceKindForWorktreeId(conversation.worktreeId),
-        worktreeId: conversation.worktreeId
-      },
-      settings: state.settings
-    })
+    CLI_CONVERSATION_ADOPTING_AGENTS[conversation.agent].some((agent) =>
+      structuredAgentSessionLaunchFeasible(state, {
+        agent,
+        workspace: {
+          kind: workspaceKindForWorktreeId(conversation.worktreeId),
+          worktreeId: conversation.worktreeId
+        },
+        settings: state.settings
+      })
+    )
   )
 }
 
@@ -173,7 +175,12 @@ export function findTabSessionHistoryRow(
         return session.structuredSession?.sessionId === subject.sessionId
       }
       // A chat-owned row still matches: the move's gate refuses it, and the caller can open that chat.
-      return session.agent === subject.agent && session.sessionId === subject.providerSessionId
+      // By the chats that take it over: an OpenCode 2.x pane reports `opencode`, its row `opencode2`.
+      return (
+        adoptsCliConversations(session.agent) &&
+        cliConversationRowsShareAgent(session.agent, subject.agent) &&
+        session.sessionId === subject.providerSessionId
+      )
     }) ?? null
   )
 }

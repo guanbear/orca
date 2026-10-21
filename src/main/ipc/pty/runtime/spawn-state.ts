@@ -1,3 +1,5 @@
+import type { PtyRegistrationClaim } from '../../../runtime/runtime-terminal-state-records'
+import type { PaneSpawnOperation } from '../pane/pane-spawn-operation'
 import type { AgentLaunchRuntime } from '../../../../shared/agent-launch-runtime'
 import type { SpawnIntent } from '../../../../shared/host-spawn-admission'
 import type {
@@ -60,6 +62,7 @@ export type RuntimePtySpawnState = {
   requestedAgentTeamsPath: string | undefined
   selectedCodexHomePath: string | null
   codexResumeHomeSelected: boolean
+  codexResumeArgvDropped: boolean
   skipCodexHomeEnv: boolean
   stripInheritedOrcaCodexHome: boolean
   spawnOptions: PtySpawnOptions
@@ -80,6 +83,7 @@ export type RuntimePtySpawnState = {
   stablePaneBindingPersisted: boolean
   rejectedRegistrationCandidate: PtySpawnResult | null
   pendingRegistrationPtyId: string | null
+  pendingRegistrationClaim?: PtyRegistrationClaim
   reconciledSnapshotSeq: number | null
   snapshotKittyFlagsCoverReconciledSeq: boolean
   preparedProvisionalExecutionContext: boolean
@@ -130,6 +134,7 @@ export type RuntimePtySpawnArgs = {
   signal?: AbortSignal
   refuseSleptWorktree?: boolean
   onPtySpawnCommitted?: () => void
+  paneSpawnOperation?: PaneSpawnOperation
   adoptedStablePane?: {
     result: PtySpawnResult
     owner: {
@@ -175,6 +180,7 @@ export function createRuntimePtySpawnState(
     requestedAgentTeamsPath: undefined,
     selectedCodexHomePath: null,
     codexResumeHomeSelected: false,
+    codexResumeArgvDropped: false,
     skipCodexHomeEnv: false,
     stripInheritedOrcaCodexHome: false,
     spawnOptions: { cols: args.cols, rows: args.rows },
